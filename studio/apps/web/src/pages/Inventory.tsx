@@ -26,6 +26,9 @@ export interface InvRow {
   confirmedBy: string | null;
   confirmBasis: string | null;
   specCount: number;
+  duplicateOf: string | null;
+  duplicateOfProduct: string | null;
+  duplicateNote: string | null;
 }
 interface Snap {
   id: string;
@@ -50,9 +53,13 @@ const ISSUE_LABEL: Record<string, string> = {
   RATE_NOT_NUMERIC: 'rate not a number',
   RMS_ID_BLANK: 'no RMS ID',
   POSSIBLE_DUPLICATE_PRODUCT: 'possible duplicate',
+  POSSIBLE_NEAR_DUPLICATE: 'possible duplicate',
+  QTY_UNIT_OF_MEASURE: 'qty in m²/m?',
   DATA_FLAG_PRESENT: 'data flag',
   CHARGE_PERIOD_BLANK: 'period blank',
 };
+
+const isDupFlagged = (r: InvRow) => r.issues.includes('POSSIBLE_DUPLICATE_PRODUCT') || r.issues.includes('POSSIBLE_NEAR_DUPLICATE');
 
 export function InventoryPage() {
   const { me } = useMe();
@@ -62,7 +69,7 @@ export function InventoryPage() {
   const [err, setErr] = useState<unknown>(null);
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('');
-  const [filter, setFilter] = useState<'all' | 'unconfirmed' | 'confirmed' | 'mismatch' | 'issues' | 'notinfile'>('all');
+  const [filter, setFilter] = useState<'all' | 'unconfirmed' | 'confirmed' | 'mismatch' | 'issues' | 'notinfile' | 'duplicates'>('all');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [basis, setBasis] = useState('');
@@ -91,9 +98,20 @@ export function InventoryPage() {
     if (filter === 'mismatch') return r.qtyConfirmed !== null && r.qtyShown !== null && r.qtyConfirmed !== r.qtyShown;
     if (filter === 'issues') return r.issues.length > 0;
     if (filter === 'notinfile') return !r.inSourceFile;
+    if (filter === 'duplicates') return isDupFlagged(r) || !!r.duplicateOf;
     return true;
   });
   const confirmed = rows.filter((r) => r.qtyConfirmed !== null).length;
+  const dupCandidates = rows.filter((r) => isDupFlagged(r) && !r.duplicateOf);
+  const markDup = async (r: InvRow, ofItemId: string | null) => {
+    setErr(null);
+    try {
+      await api.post(`/inventory/items/${r.itemId}/duplicate`, { ofItemId, note: ofItemId ? 'Marked from inventory page' : undefined });
+      await load();
+    } catch (e) {
+      setErr(e);
+    }
+  };
   const canConfirm = can(me, 'inventory.confirm_qty');
 
   const onUpload = async (f: File) => {
@@ -166,6 +184,7 @@ export function InventoryPage() {
                 <option value="mismatch">Confirmed ≠ file qty</option>
                 <option value="issues">Has data-quality issues</option>
                 <option value="notinfile">Kept but missing from latest file</option>
+                <option value="duplicates">Possible / marked duplicates</option>
               </select>
               <span className="muted small">{shown.length} shown</span>
             </div>
@@ -224,6 +243,21 @@ export function InventoryPage() {
                       <td>
                         {r.modelId ? <Link to={`/equipment/${r.modelId}`}>{r.product}</Link> : r.product}
                         {!r.inSourceFile && <div className="small muted">Not in latest file — kept for review</div>}
+                        {r.duplicateOf ? (
+                          <div className="small" style={{ color: 'var(--st-estimated)' }}>
+                            Duplicate of “{r.duplicateOfProduct ?? 'another record'}” — excluded from designs{' '}
+                            {canConfirm && <button className="btn sm ghost" onClick={() => markDup(r, null)}>Undo</button>}
+                          </div>
+                        ) : (
+                          canConfirm && isDupFlagged(r) && (
+                            <div className="small">
+                              <select defaultValue="" onChange={(e) => e.target.value && markDup(r, e.target.value)} style={{ minHeight: 28, fontSize: 12 }} aria-label={`Mark ${r.product} as duplicate`}>
+                                <option value="">Same equipment as…</option>
+                                {dupCandidates.filter((x) => x.itemId !== r.itemId).map((x) => <option key={x.itemId} value={x.itemId}>{x.product} ({x.productGroup ?? '—'}, file qty {x.qtyShown ?? 'blank'})</option>)}
+                              </select>
+                            </div>
+                          )
+                        )}
                       </td>
                       <td>{r.productGroup ?? '—'}</td>
                       <td>

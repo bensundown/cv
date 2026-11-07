@@ -197,6 +197,25 @@ describe('equipment specs provenance', () => {
   });
 });
 
+describe('duplicates and bulk rules', () => {
+  it('marks a duplicate, blocks confirming it, and can undo', async () => {
+    const rows = (await req('GET', '/api/inventory')).json().rows as { itemId: string; rmsId: string; duplicateOf: string | null }[];
+    const keep = rows.find((r) => r.rmsId === '2004')!;
+    const dup = rows.find((r) => r.rmsId === '2006')!;
+    expect((await req('POST', `/api/inventory/items/${dup.itemId}/duplicate`, { ofItemId: dup.itemId })).status).toBe(422);
+    expect((await req('POST', `/api/inventory/items/${dup.itemId}/duplicate`, { ofItemId: keep.itemId, note: 'same item' })).status).toBe(200);
+    expect((await req('GET', '/api/inventory')).json().rows.find((r: { rmsId: string }) => r.rmsId === '2006').duplicateOf).toBe(keep.itemId);
+    expect((await req('POST', '/api/inventory/confirmations', { basis: 'test', items: [{ itemId: dup.itemId, qtyOwned: 1 }] })).status).toBe(422);
+    expect((await req('POST', `/api/inventory/items/${keep.itemId}/duplicate`, { ofItemId: rows.find((r) => r.rmsId === '2001')!.itemId })).status).toBe(422); // has dependants
+    expect((await req('POST', `/api/inventory/items/${dup.itemId}/duplicate`, { ofItemId: null })).status).toBe(200);
+  });
+  it('creates a rule for every model in a category, once', async () => {
+    const body = { type: 'REQUIRES', fromCategory: 'STAGE_DECK', toCategory: 'STAGE_LEG', quantity: { kind: 'per_unit', ratio: 4 }, status: 'PROVISIONAL', evidence: [{ kind: 'user_confirmation', ref: 'Owner instruction (test)' }] };
+    expect((await req('POST', '/api/relationships/bulk', body)).json().created).toBe(1);
+    expect((await req('POST', '/api/relationships/bulk', body)).json().created).toBe(0);
+  });
+});
+
 let venueId = '';
 let projectId = '';
 let rev1 = '';

@@ -117,6 +117,38 @@ export async function equipmentRoutes(app: FastifyInstance, pool: pg.Pool) {
     return row;
   });
 
+  /** Create the same relationship from every model in a category (e.g. all STAGE_DECK models REQUIRE 4 legs). */
+  app.post('/relationships/bulk', async (req) => {
+    const u = requirePerm(req, 'equipment.edit');
+    const b = z
+      .object({
+        type: z.enum(RELATIONSHIP_TYPES),
+        fromCategory: z.enum(ENGINEERING_CATEGORIES),
+        toCategory: z.enum(ENGINEERING_CATEGORIES),
+        quantity: z.object({ kind: z.literal('per_unit'), ratio: z.number().positive().max(1000) }),
+        evidence: z.array(SourceZ).min(1),
+        status: Status,
+      })
+      .parse(req.body);
+    if (b.status === 'VERIFIED' && !can(u, 'equipment.verify')) throw new HttpError(403, 'Only a technical reviewer or admin can create VERIFIED relationships');
+    return tx(pool, async (c) => {
+      const models = await many<{ id: string }>(
+        c,
+        `SELECT m.id FROM product_model m WHERE m.tenant_id=$1 AND m.category=$2
+         AND NOT EXISTS (SELECT 1 FROM equipment_relationship r WHERE r.from_model_id=m.id AND r.type=$3 AND r.to_category=$4 AND r.superseded_at IS NULL)`,
+        [u.tenantId, b.fromCategory, b.type, b.toCategory],
+      );
+      for (const m of models) {
+        await c.query(
+          `INSERT INTO equipment_relationship(tenant_id, type, from_model_id, to_category, quantity_rule, constraints, evidence, status, created_by) VALUES ($1,$2,$3,$4,$5,'{}',$6,$7,$8)`,
+          [u.tenantId, b.type, m.id, b.toCategory, JSON.stringify(b.quantity), JSON.stringify(b.evidence), b.status, u.id],
+        );
+      }
+      await audit(c, u, 'relationship.bulk_created', 'product_model', null, { ...b, models: models.length });
+      return { created: models.length };
+    });
+  });
+
   app.delete('/relationships/:id', async (req) => {
     const u = requirePerm(req, 'equipment.edit');
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

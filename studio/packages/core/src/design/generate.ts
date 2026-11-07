@@ -252,15 +252,52 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     .filter((x): x is { s: StockItem; min: number; max: number; status: Confidence } => x !== null);
   const covers = (l: { min: number; max: number }, h: number) => h >= l.min - 1 && h <= l.max + 1;
   const legLabel = (l: { min: number; max: number }) => (l.min === l.max ? fmtM(l.min) : `${fmtM(l.min)}–${fmtM(l.max)}`);
+  // Deck tiling.
+  const deckOpts: (DeckOption & { s: StockItem; dimStatus: Confidence })[] = stock
+    .filter((s) => s.category === 'STAGE_DECK')
+    .map((s) => ({ s, w: spec(s.specs, 'deck_width_mm'), d: spec(s.specs, 'deck_depth_mm') }))
+    .filter((x) => x.w.value !== null && x.d.value !== null)
+    .map((x) => ({ itemId: x.s.itemId, widthMm: x.w.value!, depthMm: x.d.value!, available: x.s.qtyConfirmed ?? 0, s: x.s, dimStatus: weakest(x.w.status, x.d.status) }));
+  const tiling = deckOpts.length ? tileStage(SW, SD, deckOpts, P.stage.deckItemId) : null;
+  const deckCounts: Record<string, number> = tiling?.counts ?? {};
+
+  // Leg rule per deck type: REQUIRES/REQUIRES_ONE_OF relationship, else the labelled 4-per-deck default.
+  const legRuleFor = (deck: StockItem) => {
+    const edges: EquipmentRelationship[] = deck.modelId
+      ? [...edgesFrom(G, deck.modelId, 'REQUIRES'), ...edgesFrom(G, deck.modelId, 'REQUIRES_ONE_OF')].filter(
+          (e) => e.to.category === 'STAGE_LEG' || legCands.some((l) => l.s.modelId && (e.to.modelId === l.s.modelId || e.to.oneOf?.includes(l.s.modelId))),
+        )
+      : [];
+    const edge = edges[0];
+    const cands = edge && (edge.to.modelId || edge.to.oneOf) ? legCands.filter((l) => l.s.modelId && (edge.to.modelId === l.s.modelId || edge.to.oneOf?.includes(l.s.modelId))) : legCands;
+    return { edge, cands, rule: edge?.quantity ?? ({ kind: 'per_unit', ratio: 4 } as const) };
+  };
+  const legsNeeded = Object.entries(deckCounts).reduce((a, [id, n]) => a + requiredQuantity(legRuleFor(stock.find((x) => x.itemId === id)!).rule, n), 0);
+  const ownedCovering = (h: number) => legCands.filter((l) => covers(l, h)).reduce((a, l) => a + (l.s.qtyConfirmed ?? 0), 0);
+
   let stageH = P.stage.heightMm;
   let stageHStatus: Confidence = stageH !== null ? pStat(P, 'stage.heightMm') : 'ESTIMATED';
   if (stageH === null) {
     if (legCands.length) {
-      const near = (l: { min: number; max: number }) => Math.min(Math.max(1000, l.min), l.max);
-      const best = [...legCands].sort((a, b) => Math.abs(near(a) - 1000) - Math.abs(near(b) - 1000) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0))[0]!;
-      stageH = near(best);
-      stageHStatus = weakest('ESTIMATED', best.status);
-      assumptions.push({ id: 'stage.height', text: `Stage height ${fmtM(stageH)} chosen from available leg heights (closest to 1.0 m)`, status: stageHStatus, source: DEFAULT });
+      // Candidate heights: each leg's fixed height, range ends, and 1.0 m clamped into each range.
+      const hs = [...new Set(legCands.flatMap((l) => [l.min, l.max, Math.min(Math.max(1000, l.min), l.max)]))];
+      const byCloseness = [...hs].sort((a, b) => Math.abs(a - 1000) - Math.abs(b - 1000) || b - a);
+      const ideal = byCloseness[0]!;
+      const feasible = legsNeeded > 0 ? byCloseness.find((h) => ownedCovering(h) >= legsNeeded) : undefined;
+      stageH = feasible ?? ideal;
+      const used = legCands.filter((l) => covers(l, stageH!));
+      stageHStatus = weakest('ESTIMATED', ...used.map((l) => l.status));
+      assumptions.push({
+        id: 'stage.height',
+        text: feasible !== undefined
+          ? `Stage height ${fmtM(stageH)}: the height closest to 1.0 m that confirmed owned legs can fully support (${legsNeeded} legs needed)`
+          : `Stage height ${fmtM(stageH)} chosen from available leg heights (closest to 1.0 m); confirmed legs do not cover ${legsNeeded} legs at any height`,
+        status: stageHStatus,
+        source: DEFAULT,
+      });
+      if (feasible !== undefined && feasible !== ideal) {
+        alternatives.push(`A ${fmtM(ideal)} stage needs ${legsNeeded} legs covering ${fmtM(ideal)}; only ${ownedCovering(ideal)} are confirmed — confirm or hire ${legsNeeded - ownedCovering(ideal)} more, or state the stage height in the brief.`);
+      }
     } else {
       stageH = 1000;
       assumptions.push({ id: 'stage.height', text: 'Stage height 1.0 m assumed (no leg heights recorded)', status: 'ESTIMATED', source: DEFAULT });
@@ -277,14 +314,6 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     status: weakest(stageDimStatus, stageHStatus),
   });
 
-  // Deck tiling.
-  const deckOpts: (DeckOption & { s: StockItem; dimStatus: Confidence })[] = stock
-    .filter((s) => s.category === 'STAGE_DECK')
-    .map((s) => ({ s, w: spec(s.specs, 'deck_width_mm'), d: spec(s.specs, 'deck_depth_mm') }))
-    .filter((x) => x.w.value !== null && x.d.value !== null)
-    .map((x) => ({ itemId: x.s.itemId, widthMm: x.w.value!, depthMm: x.d.value!, available: x.s.qtyConfirmed ?? 0, s: x.s, dimStatus: weakest(x.w.status, x.d.status) }));
-  const tiling = deckOpts.length ? tileStage(SW, SD, deckOpts, P.stage.deckItemId) : null;
-  const deckCounts: Record<string, number> = tiling?.counts ?? {};
   if (!deckOpts.length) {
     checks.push({ id: 'stage.decks', title: 'Stage decks from inventory', discipline: 'staging', severity: 'hard', result: 'UNKNOWN', message: 'No stage deck in the inventory has recorded deck dimensions (deck_width_mm / deck_depth_mm).', dataStatus: 'UNKNOWN', inputs: [] });
     unresolved.push({ id: 'stage.decks', description: `Stage decks for ${fmtM(SW)} × ${fmtM(SD)}`, reason: 'No deck dimensions recorded', candidates: stock.filter((s) => s.category === 'STAGE_DECK').map((s) => s.product) });
@@ -340,19 +369,12 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     const legStatuses: Confidence[] = [];
     for (const [deckId, nDecks] of Object.entries(deckCounts)) {
       const deck = alloc.byId(deckId)!;
-      const edges: EquipmentRelationship[] = deck.modelId
-        ? [...edgesFrom(G, deck.modelId, 'REQUIRES'), ...edgesFrom(G, deck.modelId, 'REQUIRES_ONE_OF')].filter(
-            (e) => e.to.category === 'STAGE_LEG' || legCands.some((l) => l.s.modelId && (e.to.modelId === l.s.modelId || e.to.oneOf?.includes(l.s.modelId))),
-          )
-        : [];
-      const edge = edges[0];
-      let cands = legCands;
-      if (edge && (edge.to.modelId || edge.to.oneOf)) cands = legCands.filter((l) => l.s.modelId && (edge.to.modelId === l.s.modelId || edge.to.oneOf?.includes(l.s.modelId)));
+      const { edge, cands, rule: qtyRule } = legRuleFor(deck);
       const deckT = spec(deck.specs, 'deck_thickness_mm').value;
       const fits = cands.filter((l) => covers(l, stageH!) || (deckT !== null && covers(l, stageH! - deckT)));
-      // Prefer fixed-height legs, then the leg with most confirmed stock.
-      const match = [...fits].sort((a, b) => (a.max - a.min) - (b.max - b.min) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0))[0];
-      const qtyRule = edge?.quantity ?? { kind: 'per_unit' as const, ratio: 4 };
+      // Prefer fixed-height legs, then the leg with most confirmed stock; mix products that fit.
+      const ordered = [...fits].sort((a, b) => (a.max - a.min) - (b.max - b.min) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0));
+      const match = ordered[0];
       if (!edge) {
         assumptions.push({ id: `legs:${deckId}`, text: `${deck.product}: 4 legs per deck assumed (no REQUIRES relationship recorded)`, status: 'ESTIMATED', source: DEFAULT });
       }
@@ -364,9 +386,17 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       }
       const n = requiredQuantity(qtyRule, nDecks);
       const basis = edge ? edge.status : 'ESTIMATED';
-      const r = alloc.require(match.s.itemId, n, `Stage legs for ${deck.product}`, basis);
-      legStatuses.push(weakest(basis, match.status));
-      if (r.shortfall) legIssues.push(`Short ${r.shortfall} × ${match.s.product}${qtyNote(match.s)}${edge ? '' : ' — based on the ASSUMED 4 legs per deck; record the real leg rule (REQUIRES relationship) for this deck'}`);
+      let left = n;
+      for (const [k, l] of ordered.entries()) {
+        const last = k === ordered.length - 1;
+        const take = last ? left : Math.min(left, alloc.remaining(l.s.itemId));
+        if (take <= 0) continue;
+        const r = alloc.require(l.s.itemId, take, `Stage legs for ${deck.product}`, basis);
+        legStatuses.push(weakest(basis, l.status));
+        left -= r.allocated;
+        if (r.shortfall) legIssues.push(`Short ${r.shortfall} legs for ${fmtM(stageH)} (${ordered.map((o) => `${o.s.product}${qtyNote(o.s)}`).join(', ')})${edge ? '' : ' — based on the ASSUMED 4 legs per deck; record the real leg rule (REQUIRES relationship) for this deck'}`);
+        if (left <= 0) break;
+      }
     }
     const legUnknown = legStatuses.includes('UNKNOWN');
     checks.push({

@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { HttpError, requirePerm } from '../auth.js';
 import { many, one } from '../db.js';
-import { applyImport, confirmQuantities, listInventory, rollbackTo, stageImport } from '../inventory.js';
+import { applyImport, confirmQuantities, listInventory, markDuplicate, rollbackTo, stageImport } from '../inventory.js';
 import { ALLOWED_MIME, detectMime, putFile } from '../storage.js';
 
 export async function inventoryRoutes(app: FastifyInstance, pool: pg.Pool) {
@@ -95,6 +95,14 @@ export async function inventoryRoutes(app: FastifyInstance, pool: pg.Pool) {
     }
     if (!items.length) throw new HttpError(400, 'Nothing to confirm');
     return confirmQuantities(pool, u, items, b.basis);
+  });
+
+  /** Mark a record as the same equipment as another record (or clear the mark with ofItemId: null). */
+  app.post('/inventory/items/:id/duplicate', async (req) => {
+    const u = requirePerm(req, 'inventory.confirm_qty');
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const b = z.object({ ofItemId: z.string().uuid().nullable(), note: z.string().max(500).optional() }).parse(req.body);
+    return markDuplicate(pool, u, id, b.ofItemId, b.note ?? null);
   });
 
   app.get('/inventory/items/:id/history', async (req) => {

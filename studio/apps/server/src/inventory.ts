@@ -266,6 +266,9 @@ export interface InventoryRow {
   confirmedBy: string | null;
   confirmBasis: string | null;
   specCount: number;
+  duplicateOf: string | null;
+  duplicateOfProduct: string | null;
+  duplicateNote: string | null;
 }
 
 export async function listInventory(q: Q, tenantId: string, snapshotId?: string): Promise<{ snapshot: { id: string; version: number } | null; rows: InventoryRow[] }> {
@@ -278,7 +281,9 @@ export async function listInventory(q: Q, tenantId: string, snapshotId?: string)
             si.data_flag AS "dataFlag", si.issues, si.in_source_file AS "inSourceFile", si.source_row AS "sourceRow",
             pm.id AS "modelId", pm.manufacturer, COALESCE(pm.category,'OTHER') AS category, COALESCE(pm.category_status,'UNKNOWN') AS "categoryStatus",
             qc.qty_owned AS "qtyConfirmed", qc.confirmed_at AS "confirmedAt", u.email AS "confirmedBy", qc.basis AS "confirmBasis",
-            (SELECT count(*) FROM spec_value sv WHERE sv.product_model_id=pm.id AND sv.superseded_at IS NULL)::int AS "specCount"
+            (SELECT count(*) FROM spec_value sv WHERE sv.product_model_id=pm.id AND sv.superseded_at IS NULL)::int AS "specCount",
+            ii.duplicate_of AS "duplicateOf", ii.duplicate_note AS "duplicateNote",
+            (SELECT d.product FROM inventory_snapshot_item d WHERE d.snapshot_id=si.snapshot_id AND d.item_id=ii.duplicate_of) AS "duplicateOfProduct"
      FROM inventory_snapshot_item si
      JOIN inventory_item ii ON ii.id=si.item_id
      LEFT JOIN product_model pm ON pm.id=ii.product_model_id
@@ -297,13 +302,32 @@ export async function confirmQuantities(pool: pg.Pool, user: SessionUser, items:
     const snap = await currentSnapshot(c, user.tenantId);
     for (const it of items) {
       if (!Number.isInteger(it.qtyOwned) || it.qtyOwned < 0) throw new HttpError(400, `Invalid quantity for ${it.itemId}`);
-      const owned = await one(c, 'SELECT 1 FROM inventory_item WHERE id=$1 AND tenant_id=$2', [it.itemId, user.tenantId]);
+      const owned = await one<{ duplicate_of: string | null }>(c, 'SELECT duplicate_of FROM inventory_item WHERE id=$1 AND tenant_id=$2', [it.itemId, user.tenantId]);
       if (!owned) throw new HttpError(404, `Item ${it.itemId} not found`);
+      if (owned.duplicate_of) throw new HttpError(422, 'This record is marked as a duplicate — confirm the quantity on the record you are keeping');
       await c.query('UPDATE quantity_confirmation SET superseded_at=now() WHERE item_id=$1 AND superseded_at IS NULL', [it.itemId]);
       await c.query('INSERT INTO quantity_confirmation(item_id, qty_owned, basis, snapshot_id, confirmed_by) VALUES ($1,$2,$3,$4,$5)', [it.itemId, it.qtyOwned, basis, snap?.id ?? null, user.id]);
     }
     await audit(c, user, 'inventory.qty.confirmed', 'inventory_item', null, { count: items.length, basis, items });
     return { confirmed: items.length };
+  });
+}
+
+export async function markDuplicate(pool: pg.Pool, user: SessionUser, itemId: string, ofItemId: string | null, note: string | null) {
+  return tx(pool, async (c) => {
+    const item = await one<{ id: string }>(c, 'SELECT id FROM inventory_item WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [itemId, user.tenantId]);
+    if (!item) throw new HttpError(404, 'Item not found');
+    if (ofItemId) {
+      if (ofItemId === itemId) throw new HttpError(422, 'An item cannot be a duplicate of itself');
+      const target = await one<{ duplicate_of: string | null }>(c, 'SELECT duplicate_of FROM inventory_item WHERE id=$1 AND tenant_id=$2', [ofItemId, user.tenantId]);
+      if (!target) throw new HttpError(404, 'Target item not found');
+      if (target.duplicate_of) throw new HttpError(422, 'The target is itself marked as a duplicate — choose the record you are keeping');
+      const dependants = await one<{ n: number }>(c, 'SELECT count(*)::int AS n FROM inventory_item WHERE duplicate_of=$1', [itemId]);
+      if (dependants!.n) throw new HttpError(422, 'Other records are marked as duplicates of this one; un-mark them first');
+    }
+    await c.query('UPDATE inventory_item SET duplicate_of=$2, duplicate_note=$3, duplicate_marked_by=$4, duplicate_marked_at=now() WHERE id=$1', [itemId, ofItemId, ofItemId ? note : null, user.id]);
+    await audit(c, user, ofItemId ? 'inventory.item.marked_duplicate' : 'inventory.item.unmarked_duplicate', 'inventory_item', itemId, { ofItemId, note });
+    return { ok: true };
   });
 }
 
@@ -325,7 +349,9 @@ export async function specsForModels(q: Q, modelIds: string[]): Promise<Map<stri
 
 /** The design engine's view of the current inventory: confirmed quantities + specs. */
 export async function stockForDesign(q: Q, tenantId: string): Promise<{ snapshotId: string | null; stock: StockItem[] }> {
-  const { snapshot, rows } = await listInventory(q, tenantId);
+  const { snapshot, rows: all } = await listInventory(q, tenantId);
+  // Records marked as duplicates of another record are never offered to the design engine.
+  const rows = all.filter((r) => !r.duplicateOf);
   const specs = await specsForModels(q, rows.map((r) => r.modelId).filter(Boolean) as string[]);
   return {
     snapshotId: snapshot?.id ?? null,

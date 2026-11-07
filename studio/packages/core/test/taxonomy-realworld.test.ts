@@ -106,6 +106,30 @@ describe('adjustable legs in the stage engine', () => {
     expect(r.validation.checks.find((c) => c.id === 'stage.legs')!.result).toBe('PASS');
     expect(r.bom.lines.find((l) => l.itemId === 'a')).toBeTruthy();
   });
+  it('owner rule 4 legs/deck: picks the highest height owned legs can fully support and says why', () => {
+    const d = { ...deck, qtyConfirmed: 58 };
+    const lowStock = { ...legB, qtyConfirmed: 134 }; // 600–900: not enough for 144 at 0.9 m
+    const p = defaultParams();
+    p.stage.widthMm = 12000;
+    p.stage.depthMm = 6000;
+    p.led.enabled = false;
+    const rel = [{ id: 'r', type: 'REQUIRES' as const, fromModelId: d.modelId!, to: { category: 'STAGE_LEG' as const }, quantity: { kind: 'per_unit' as const, ratio: 4 }, constraints: {}, evidence: [{ kind: 'user_confirmation' as const, ref: 'Owner instruction' }], status: 'PROVISIONAL' as const }];
+    const r = generateDesign({ params: p, venue: ballroom(), stock: [d, { ...legA, qtyConfirmed: 214 }, lowStock], relationships: rel });
+    expect(r.scene.objects.find((o) => o.kind === 'stage')!.size.z).toBe(600);
+    expect(r.validation.checks.find((c) => c.id === 'stage.legs')!.result).toBe('PASS');
+    expect(r.bom.lines.filter((l) => l.category === 'STAGE_LEG').reduce((a, l) => a + l.allocated, 0)).toBe(144);
+    expect(r.alternatives.some((a) => a.includes('0.90 m stage needs 144 legs') && a.includes('only 134'))).toBe(true);
+    expect(r.assumptions.some((a) => a.id.startsWith('legs:'))).toBe(false); // rule recorded, not assumed
+  });
+  it('an explicit height mixes leg products to cover the requirement', () => {
+    const p = defaultParams();
+    p.stage.heightMm = 600;
+    p.led.enabled = false;
+    const r = generateDesign({ params: p, venue: ballroom(), stock: [deck, { ...legA, qtyConfirmed: 10 }, { ...legB, qtyConfirmed: 300 }], relationships: [] });
+    const legs = r.bom.lines.filter((l) => l.category === 'STAGE_LEG');
+    expect(legs.map((l) => l.allocated)).toEqual([10, 54]); // 16 decks × 4 = 64
+    expect(r.validation.checks.find((c) => c.id === 'stage.legs')!.result).toBe('PASS');
+  });
   it('shaped platforms are never tiled into a rectangular stage', () => {
     const shaped = stockItem({ itemId: 'h', product: 'HEXA CURVED PLATFORM 2M X 1M', category: 'STAGE_DECK_SHAPED', qtyConfirmed: 60, specs: { ...s('deck_width_mm', 2000), ...s('deck_depth_mm', 1000) } });
     const r = generateDesign({ params: defaultParams(), venue: ballroom(), stock: [shaped, legA], relationships: [] });

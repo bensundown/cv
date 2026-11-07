@@ -7,7 +7,6 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "db:migrate": "tsx src/migrate.ts",
-    "create-admin": "tsx src/cli/create-admin.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },

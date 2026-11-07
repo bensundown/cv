@@ -18,7 +18,7 @@ export function EquipmentPage() {
   const [models, setModels] = useState<{ id: string; model: string; category: string }[]>([]);
   const [err, setErr] = useState<unknown>(null);
   const [form, setForm] = useState({ key: '', value: '', status: 'PROVISIONAL', kind: 'manufacturer_doc', ref: '', url: '', note: '' });
-  const [rel, setRel] = useState({ type: 'REQUIRES', target: '', ratio: '4', status: 'PROVISIONAL', ref: '' });
+  const [rel, setRel] = useState({ type: 'REQUIRES', target: '', ratio: '4', status: 'PROVISIONAL', ref: '', allInCategory: false });
   const load = () => api.get<NonNullable<typeof d>>(`/models/${id}`).then(setD, setErr);
   useEffect(() => {
     void load();
@@ -45,6 +45,13 @@ export function EquipmentPage() {
     setErr(null);
     try {
       const isCat = rel.target.startsWith('cat:');
+      if (rel.allInCategory) {
+        if (!isCat || !rel.ratio) throw new Error('“Apply to every model in this category” needs a category target and a quantity per unit');
+        const r = await api.post<{ created: number }>('/relationships/bulk', { type: rel.type, fromCategory: d!.model.category, toCategory: rel.target.slice(4), quantity: { kind: 'per_unit', ratio: Number(rel.ratio) }, status: rel.status, evidence: [{ kind: 'user_confirmation', ref: rel.ref || 'Owner instruction' }] });
+        alert(`Created for ${r.created} model(s) in ${d!.model.category}.`);
+        await load();
+        return;
+      }
       await api.post('/relationships', {
         type: rel.type,
         fromModelId: id,
@@ -176,6 +183,10 @@ export function EquipmentPage() {
               </div>
               <div className="row">
                 <input placeholder="Evidence (manual section, test record)" value={rel.ref} onChange={(e) => setRel({ ...rel, ref: e.target.value })} style={{ flex: 1 }} />
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+                  <input type="checkbox" style={{ minHeight: 0 }} checked={rel.allInCategory} onChange={(e) => setRel({ ...rel, allInCategory: e.target.checked })} />
+                  Apply to every {d.model.category} model
+                </label>
                 <button className="btn primary sm" disabled={!rel.target} onClick={saveRel}>Add</button>
               </div>
             </div>

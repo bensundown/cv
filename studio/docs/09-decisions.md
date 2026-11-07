@@ -10,7 +10,9 @@
 | D-006 | **PDF vector extraction library** (PyMuPDF AGPL/commercial vs MIT alternatives) | **Open — needs owner** | Extraction quality vs licence obligations for future SaaS. |
 | D-007 | Product lives in `studio/` inside the `cv` repo for now | Made, easy to move | Repo was a personal site; `studio/` is self-contained (own workspace, CI filter). Recommend a dedicated private repo. |
 | D-008 | Stage height defaults to the available leg height closest to 1.0 m when the brief doesn't state it | Made | Labelled ESTIMATED in the assumption register. |
-| D-009 | 4 legs per deck as a labelled design default until a REQUIRES relationship is recorded | Made | Real AluStage leg sharing differs; must be replaced by verified relationships. |
+| D-009 | 4 legs per deck — confirmed by the owner 2026-11-07; recorded as a REQUIRES relationship (PROVISIONAL, owner instruction) for every rectangular deck | Made | Engine still falls back to the labelled default when no relationship exists. |
+| D-014 | Default stage height = height closest to 1.0 m that confirmed owned legs can fully support; leg products covering the height are mixed | Made | Avoids designs that fail on stock when a feasible lower stage exists; the higher option is reported as an alternative. |
+| D-015 | Duplicate records are marked (not merged or deleted): the duplicate keeps its source data but is excluded from design stock and cannot be quantity-confirmed | Made | Preserves source identity and history across re-imports. |
 | D-010 | Rollback = new snapshot copying an old one | Made | Linear, auditable history; no destructive edits. |
 | D-011 | Traced room geometry keeps user's vertex order (CW or CCW) | Made | Wall numbers must match what the user drew; engine handles both windings. |
 | D-013 | Ordered, group-aware taxonomy rules; non-equipment categories (PACKAGE, SERVICE_OR_CONSUMABLE); STAGE_DECK_SHAPED never tiled; adjustable leg ranges | Made after the real workbook | Real names broke the first keyword rules (truss as decks, amps for 32 A cables). Categories remain ESTIMATED and user-correctable. |
