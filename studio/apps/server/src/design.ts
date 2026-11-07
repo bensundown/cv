@@ -6,6 +6,8 @@ import {
   defaultParams,
   effectiveParams,
   generateDesign,
+  OWNER_GUIDELINE_POLICY,
+  type StockPolicy,
   interpretCommand,
   parseBrief,
   type Confidence,
@@ -37,6 +39,12 @@ export interface StoredGeometry {
   /** Page-space polygon (pt) when traced from a plan, for overlay. */
   pagePolygonPt?: Pt[];
   pageObstaclesPt?: { label: string; polygon: Pt[] }[];
+}
+
+/** Stock allocation policy for a tenant. Default = owner decision D-016 (file qty as guideline, +20 %). */
+export async function loadStockPolicy(q: Q, tenantId: string): Promise<StockPolicy> {
+  const row = await one<{ value: StockPolicy }>(q, `SELECT value FROM tenant_setting WHERE tenant_id=$1 AND key='stock_policy'`, [tenantId]);
+  return row?.value ?? OWNER_GUIDELINE_POLICY;
 }
 
 export async function loadRelationships(q: Q, tenantId: string): Promise<EquipmentRelationship[]> {
@@ -114,7 +122,8 @@ export async function createRevision(
     const { snapshotId, stock } = await stockForDesign(c, user.tenantId);
     const relationships = await loadRelationships(c, user.tenantId);
     const stageWall = opts.stageWall ?? geo.geometry.defaultStageWall;
-    const ctx: DesignContext = { params: opts.params, venue: toVenue(geo.venue_name, geo.geometry, stageWall), stock, relationships };
+    const stockPolicy = await loadStockPolicy(c, user.tenantId);
+    const ctx: DesignContext = { stockPolicy, params: opts.params, venue: toVenue(geo.venue_name, geo.geometry, stageWall), stock, relationships };
     const inputHash = crypto.createHash('sha256').update(canonicalJson(ctx)).digest('hex');
     const result = generateDesign(ctx);
     const number = ((await one<{ n: number | null }>(c, 'SELECT MAX(number) AS n FROM design_revision WHERE project_id=$1', [projectId]))!.n ?? 0) + 1;

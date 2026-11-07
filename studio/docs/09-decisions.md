@@ -4,13 +4,14 @@
 |---|---|---|---|
 | D-001 | TypeScript end-to-end with a shared pure `@sn/core` engine; Python only for future document/CV/render workers | Made | One geometry implementation for browser, server and exports. Reversible per worker. |
 | D-002 | PostgreSQL 16 + plain SQL migrations, JSONB for immutable revision results | Made | Integrity + history; PostGIS/pgvector available later. |
-| D-003 | Stock allocation uses only user-attested owned quantities; file "available to rent" never allocated | Made (per brief) | Bulk accept requires attestation; zero/blank require typing. |
+| D-003 | Stock allocation uses only user-attested owned quantities; file "available to rent" never allocated | Superseded by D-016 | Bulk accept requires attestation; zero/blank require typing. |
 | D-004 | **AI provider for brief/revision interpretation** (e.g. Claude via API, Azure-hosted model, or none) | **Open — needs owner** | Cost, POPIA/data residency, quality. Rule-based interpreter ships meanwhile; interface ready. |
 | D-005 | **Hosting region & provider** (AWS af-south-1 / Azure SA North / on-prem) | **Open — needs owner** | Data residency, cost, ops. App is a single container + Postgres + object store. |
 | D-006 | **PDF vector extraction library** (PyMuPDF AGPL/commercial vs MIT alternatives) | **Open — needs owner** | Extraction quality vs licence obligations for future SaaS. |
 | D-007 | Product lives in `studio/` inside the `cv` repo for now | Made, easy to move | Repo was a personal site; `studio/` is self-contained (own workspace, CI filter). Recommend a dedicated private repo. |
 | D-008 | Stage height defaults to the available leg height closest to 1.0 m when the brief doesn't state it | Made | Labelled ESTIMATED in the assumption register. |
 | D-009 | 4 legs per deck — confirmed by the owner 2026-11-07; recorded as a REQUIRES relationship (PROVISIONAL, owner instruction) for every rectangular deck | Made | Engine still falls back to the labelled default when no relationship exists. |
+| D-016 | **Stock policy:** file quantities are availability guidelines; designs may use up to 20 % more. Confirmed owned quantities remain hard limits; over-guideline units are always flagged | Made — owner, 2026-11-07 | Replaces confirmed-only allocation (D-003) as the default. Editable on the Inventory page; recorded per revision. |
 | D-014 | Default stage height = height closest to 1.0 m that confirmed owned legs can fully support; leg products covering the height are mixed | Made | Avoids designs that fail on stock when a feasible lower stage exists; the higher option is reported as an alternative. |
 | D-015 | Duplicate records are marked (not merged or deleted): the duplicate keeps its source data but is excluded from design stock and cannot be quantity-confirmed | Made | Preserves source identity and history across re-imports. |
 | D-010 | Rollback = new snapshot copying an old one | Made | Linear, auditable history; no destructive edits. |

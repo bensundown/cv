@@ -255,14 +255,14 @@ export function ProjectWorkspace() {
               {side === 'bom' && (
                 <>
                   <table className="data small">
-                    <thead><tr><th>Item</th><th className="num">Req</th><th className="num">Alloc</th><th className="num">Owned</th></tr></thead>
+                    <thead><tr><th>Item</th><th className="num">Req</th><th className="num">Alloc</th><th className="num" title="Confirmed owned, or file guideline (+ headroom used)">Stock</th></tr></thead>
                     <tbody>
                       {res.bom.lines.map((l, i) => (
                         <tr key={i}>
                           <td>{l.product}<div className="muted">{l.purpose} · <span className="mono">{l.rmsId}</span> · basis <Badge s={l.quantityBasis} /></div></td>
                           <td className="num">{l.required}</td>
                           <td className="num" style={{ color: l.shortfall ? 'var(--st-fail)' : undefined }}>{l.allocated}{l.shortfall ? ` (−${l.shortfall})` : ''}</td>
-                          <td className="num">{l.qtyConfirmed ?? <Badge s="UNKNOWN" title="Owned quantity not confirmed" />}</td>
+                          <td className="num">{l.stockBasis === 'FILE_GUIDELINE' ? <span title="File availability guideline (not confirmed owned)">{l.qtyShown}{l.overGuideline ? <span style={{ color: 'var(--st-estimated)' }}> +{l.overGuideline}</span> : ''}</span> : l.qtyConfirmed ?? <Badge s="UNKNOWN" title="No usable quantity" />}</td>
                         </tr>
                       ))}
                     </tbody>

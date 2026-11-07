@@ -197,6 +197,15 @@ describe('equipment specs provenance', () => {
   });
 });
 
+describe('stock policy', () => {
+  it('defaults to the owner guideline policy and can be changed (audited)', async () => {
+    expect((await req('GET', '/api/settings/stock-policy')).json()).toEqual({ useFileQuantities: true, headroomPct: 20 });
+    expect((await req('PUT', '/api/settings/stock-policy', { useFileQuantities: true, headroomPct: 150 })).status).toBe(400);
+    expect((await req('PUT', '/api/settings/stock-policy', { useFileQuantities: false, headroomPct: 0 })).json()).toEqual({ useFileQuantities: false, headroomPct: 0 });
+    expect((await req('PUT', '/api/settings/stock-policy', { useFileQuantities: true, headroomPct: 20 })).status).toBe(200);
+  });
+});
+
 describe('duplicates and bulk rules', () => {
   it('marks a duplicate, blocks confirming it, and can undo', async () => {
     const rows = (await req('GET', '/api/inventory')).json().rows as { itemId: string; rmsId: string; duplicateOf: string | null }[];

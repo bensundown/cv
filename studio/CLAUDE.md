@@ -17,8 +17,11 @@ Docs live in `docs/` (PRD, architecture, data model, provenance, roadmap, risks,
 4. **Provenance on everything.** Use `Sourced<T>` / `{status, source}`. Statuses: VERIFIED > PROVISIONAL >
    ESTIMATED > UNKNOWN. Derived values take the **weakest** input status (`weakest()`).
    A value recorded with status UNKNOWN is never used.
-5. **Stock:** allocate only `qtyConfirmed` (user-attested owned quantity). `qtyShown` (RMS "available to
-   rent") is provisional and never allocated. Never present hired-in equipment as owned.
+5. **Stock (owner policy D-016):** a user-confirmed owned quantity is a hard limit. Without one, the file
+   quantity (RMS "available to rent") is an availability *guideline* and up to `headroomPct` (default 20 %)
+   more may be allocated — tenant setting `stock_policy`, frozen into each revision. Units over the guideline
+   are always flagged (`overGuideline`, `inventory.availability` check). Blank/zero file qty → nothing.
+   The engine itself defaults to confirmed-only when no policy is passed. Never present hired-in equipment as owned.
 6. **Not certification.** Nothing auto-generated is structural/electrical/rigging/crowd-safety approval.
    Safety checks are `HUMAN_REQUIRED`; concept mode is capped at PROVISIONAL.
 7. **Don't fake features.** Unsupported requests get an honest reply (see `interpretCommand`). Unbuilt

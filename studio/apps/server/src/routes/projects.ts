@@ -164,9 +164,9 @@ export async function projectRoutes(app: FastifyInstance, pool: pg.Pool) {
     const u = requirePerm(req, 'project.read');
     const { id } = Uuid.parse(req.params);
     const r = await revisionFor(pool, u.tenantId, id);
-    const head = ['RMS ID', 'Product', 'Original product group', 'Engineering category', 'Purpose', 'Required', 'Allocated (owned)', 'Shortfall', 'Confirmed owned qty', 'File qty shown (provisional)', 'Quantity basis', 'Rental rate', 'Currency', 'Charge period'];
-    const lines = r.result.bom.lines.map((l) => [l.rmsId, l.product, l.productGroup, l.category, l.purpose, l.required, l.allocated, l.shortfall, l.qtyConfirmed ?? 'NOT CONFIRMED', l.qtyShown, l.quantityBasis, l.rentalRate, l.currency, l.chargePeriod]);
-    const unresolved = r.result.bom.unresolved.map((x) => ['', `UNRESOLVED: ${x.description}`, '', '', x.reason, '', '', '', '', '', '', '', '', '']);
+    const head = ['RMS ID', 'Product', 'Original product group', 'Engineering category', 'Purpose', 'Required', 'Allocated', 'Shortfall', 'Stock basis', 'Over file guideline', 'Confirmed owned qty', 'File qty shown (availability guideline)', 'Quantity basis', 'Rental rate', 'Currency', 'Charge period'];
+    const lines = r.result.bom.lines.map((l) => [l.rmsId, l.product, l.productGroup, l.category, l.purpose, l.required, l.allocated, l.shortfall, l.stockBasis ?? 'CONFIRMED', l.overGuideline ?? 0, l.qtyConfirmed ?? 'not confirmed', l.qtyShown, l.quantityBasis, l.rentalRate, l.currency, l.chargePeriod]);
+    const unresolved = r.result.bom.unresolved.map((x) => ['', `UNRESOLVED: ${x.description}`, '', '', x.reason, '', '', '', '', '', '', '', '', '', '', '']);
     const csv = [head, ...lines, ...unresolved].map((row) => row.map(csvCell).join(',')).join('\r\n');
     reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="${r.project_name.replace(/[^\w\- ]/g, '_')}-R${r.number}-equipment.csv"`);
     return reply.send('﻿' + csv);

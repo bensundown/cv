@@ -75,11 +75,13 @@ export function InventoryPage() {
   const [basis, setBasis] = useState('');
   const [attest, setAttest] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [policy, setPolicy] = useState<{ useFileQuantities: boolean; headroomPct: number } | null>(null);
 
   const load = async () => {
     try {
       setData(await api.get('/inventory'));
       setSnaps(await api.get('/inventory/snapshots'));
+      setPolicy(await api.get('/settings/stock-policy'));
     } catch (e) {
       setErr(e);
     }
@@ -166,7 +168,29 @@ export function InventoryPage() {
       {data?.snapshot && (
         <>
           <div className="alert warn">
-            <b>Quantities are provisional until confirmed.</b> “File qty” comes from Current RMS <i>available to rent</i> figures. The design engine only allocates <b>confirmed owned</b> quantities — {confirmed} of {rows.length} items are confirmed.
+            <div className="spread">
+              <div>
+                <b>Stock policy:</b>{' '}
+                {policy?.useFileQuantities ? (
+                  <>file quantities (Current RMS <i>available to rent</i>) are used as <b>availability guidelines</b>, with up to <b>{policy.headroomPct} %</b> more allowed. Units over the file figure are flagged on every design. Confirmed owned quantities are hard limits.</>
+                ) : (
+                  <>only <b>confirmed owned</b> quantities are allocated; file quantities are ignored.</>
+                )}{' '}
+                {confirmed} of {rows.length} items have a confirmed quantity.
+              </div>
+              {policy && canConfirm && (
+                <div className="row">
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, color: 'inherit' }}>
+                    <input type="checkbox" style={{ minHeight: 0 }} checked={policy.useFileQuantities} onChange={async (e) => { try { setPolicy(await api.put('/settings/stock-policy', { ...policy, useFileQuantities: e.target.checked })); } catch (x) { setErr(x); } }} />
+                    Use file quantities
+                  </label>
+                  <label style={{ margin: 0, color: 'inherit' }}>
+                    headroom{' '}
+                    <input type="number" min={0} max={100} style={{ width: 64 }} value={policy.headroomPct} disabled={!policy.useFileQuantities} onChange={(e) => setPolicy({ ...policy, headroomPct: Number(e.target.value) })} onBlur={async () => { try { setPolicy(await api.put('/settings/stock-policy', policy)); } catch (x) { setErr(x); } }} /> %
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
           <div className="card">
             <div className="row" style={{ marginBottom: 10 }}>

@@ -183,6 +183,10 @@ export interface BomLine {
   shortfall: number;
   qtyConfirmed: number | null;
   qtyShown: number | null;
+  /** What the allocation limit was based on. */
+  stockBasis: 'CONFIRMED' | 'FILE_GUIDELINE' | 'NONE';
+  /** Units allocated above the file availability guideline (within the policy headroom). */
+  overGuideline: number;
   quantityBasis: Confidence; // how certain the required count is
   rentalRate: number | null;
   chargePeriod: string | null;
@@ -220,6 +224,8 @@ export interface RentalSummary {
 export type OverallStatus = 'FAILS_CHECKS' | 'INCOMPLETE' | Confidence;
 
 export interface DesignContext {
+  /** Allocation policy; absent = confirmed owned quantities only. */
+  stockPolicy?: { useFileQuantities: boolean; headroomPct: number };
   params: DesignParams;
   venue: VenueGeometry;
   stock: StockItem[];

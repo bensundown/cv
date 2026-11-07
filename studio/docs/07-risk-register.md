@@ -3,7 +3,7 @@
 | # | Risk | L | I | Mitigation (built ✅ / planned ☐) | Owner |
 |---|---|---|---|---|---|
 | R1 | Photoreal output mistaken for engineering approval | M | H | ✅ status banner on every PDF page, "not certification" text, HUMAN_REQUIRED checks; concept mode capped at PROVISIONAL; ☐ watermark on renders | Product |
-| R2 | RMS "available to rent" treated as owned stock → over-promising | H | H | ✅ only attested `qty_owned` allocated; zero/blank need typed entry; mismatch flags | Inventory mgr |
+| R2 | RMS "available to rent" treated as owned stock → over-promising | H | H | Owner accepted guideline use +20 % (D-016). ✅ every guideline/over-guideline allocation flagged on design, PDF and CSV; confirmed quantities stay hard caps; policy switchable to confirmed-only | Inventory mgr |
 | R3 | Real workbook differs from documented columns (merged headers, extra sheets, formulas) | M | M | ✅ header detection, synonyms, unmapped columns preserved, preview before apply; ☐ test with real file | Eng |
 | R4 | Uncalibrated or rescaled PDF used as dimensional reference | M | H | ✅ tracing refused before calibration; perpendicular check required for VERIFIED; uncertainty shown | Eng |
 | R5 | Specs copied from wrong variant (e.g. 2.6 mm indoor vs 3.9 mm outdoor cabinet) | M | H | ✅ exact model strings, name hints ESTIMATED only, reviewer-only VERIFIED with source | Tech reviewer |

@@ -18,9 +18,13 @@
    + evidence), venue sources (URL or origin note), room dimensions/ceiling (source note).
 5. **History is append-only** so any earlier revision can be explained from its frozen inputs.
 
-## Inventory quantities
-- `qty_shown` (Current RMS "available to rent") = PROVISIONAL source data. **Never allocated.**
-- `quantity_confirmation.qty_owned` = attested owned quantity (who, when, basis). Only this is allocatable.
+## Inventory quantities (stock policy D-016)
+- `quantity_confirmation.qty_owned` = attested owned quantity (who, when, basis) → **hard limit**, status VERIFIED.
+- Otherwise `qty_shown` (Current RMS "available to rent") is an **availability guideline** (PROVISIONAL): the engine may
+  allocate up to `floor(qty_shown × (1 + headroom))`, default headroom 20 % (owner decision). Units above `qty_shown`
+  are reported per line (`overGuideline`) and in the `inventory.availability` warning — "check availability before quoting".
+- Blank, zero or fractional file quantities give nothing to allocate.
+- The policy is a tenant setting (Inventory page) and is frozen into every revision's inputs.
 - Bulk "accept file quantity" is allowed only for positive whole numbers and requires an explicit attestation;
   zero/blank/fractional quantities must be typed.
 - A later file that disagrees with the confirmation is flagged (≠ file) but does not overwrite it.

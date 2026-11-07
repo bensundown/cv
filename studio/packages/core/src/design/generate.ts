@@ -28,6 +28,7 @@ import {
 import { type Confidence, type Source, type Sourced, weakest } from '../provenance.js';
 import { fmtM } from '../units.js';
 import { cabinetGrid, checkProcessor, dataChains, ledPower, nearestWallSizes, wallResolution } from './led.js';
+import { describeStock, STRICT_POLICY, stockLimit, type StockPolicy } from './stock.js';
 import { defaultCounts, DOWNSTAGE_ROLES, packDmx, pickFixture, UPSTAGE_ROLES, universesUsed } from './lighting.js';
 import { nearbyTileableSizes, tileStage, type DeckOption } from './staging.js';
 import type {
@@ -115,18 +116,24 @@ const pSourced = (p: DesignParams, key: string, value: number, unit?: string): S
 class Allocator {
   private used = new Map<string, number>();
   lines: BomLine[] = [];
-  constructor(private stock: StockItem[]) {}
+  constructor(private stock: StockItem[], private policy: StockPolicy) {}
+  limit(it: StockItem | undefined): number {
+    return it ? stockLimit(it, this.policy).limit : 0;
+  }
   byId(id: string) {
     return this.stock.find((s) => s.itemId === id);
   }
   remaining(id: string): number {
     const it = this.byId(id);
-    return Math.max(0, (it?.qtyConfirmed ?? 0) - (this.used.get(id) ?? 0));
+    return Math.max(0, this.limit(it) - (this.used.get(id) ?? 0));
   }
   require(itemId: string, qty: number, purpose: string, basis: Confidence): { allocated: number; shortfall: number } {
     const it = this.byId(itemId)!;
     const allocated = Math.min(qty, this.remaining(itemId));
-    this.used.set(itemId, (this.used.get(itemId) ?? 0) + allocated);
+    const before = this.used.get(itemId) ?? 0;
+    this.used.set(itemId, before + allocated);
+    const sl = stockLimit(it, this.policy);
+    const overGuideline = sl.basis === 'FILE_GUIDELINE' ? Math.max(0, before + allocated - sl.guideline!) - Math.max(0, before - sl.guideline!) : 0;
     this.lines.push({
       itemId,
       rmsId: it.rmsId,
@@ -139,6 +146,8 @@ class Allocator {
       shortfall: qty - allocated,
       qtyConfirmed: it.qtyConfirmed,
       qtyShown: it.qtyShown,
+      stockBasis: sl.basis,
+      overGuideline,
       quantityBasis: basis,
       rentalRate: it.rentalRate,
       chargePeriod: it.chargePeriod,
@@ -148,18 +157,20 @@ class Allocator {
   }
 }
 
-const qtyNote = (it: StockItem | undefined) =>
-  !it ? '' : it.qtyConfirmed === null ? ` (owned quantity not yet confirmed — 0 allocatable; file shows ${it.qtyShown ?? 'blank'})` : ` (confirmed owned: ${it.qtyConfirmed})`;
 
 export function generateDesign(ctx: DesignContext): DesignResult {
   const { venue: V, stock, relationships: G } = ctx;
   const P = normalizeParams(ctx.params);
+  const policy: StockPolicy = ctx.stockPolicy ?? STRICT_POLICY;
+  const qtyNote = (it: StockItem | undefined) => describeStock(it, policy);
+  const lim = (it: StockItem | undefined) => (it ? stockLimit(it, policy).limit : 0);
+  const stockStatus = (it: StockItem): Confidence => ({ CONFIRMED: 'VERIFIED', FILE_GUIDELINE: 'PROVISIONAL', NONE: 'UNKNOWN' } as const)[stockLimit(it, policy).basis];
   const checks: Check[] = [];
   const assumptions: Assumption[] = [];
   const alternatives: string[] = [];
   const unresolved: UnresolvedRequirement[] = [];
   const objects: SceneObject[] = [];
-  const alloc = new Allocator(stock);
+  const alloc = new Allocator(stock, policy);
   const roomPoly = V.roomPolygon;
   const roomStatus = weakest(V.roomStatus, V.calibrationStatus);
 
@@ -257,7 +268,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     .filter((s) => s.category === 'STAGE_DECK')
     .map((s) => ({ s, w: spec(s.specs, 'deck_width_mm'), d: spec(s.specs, 'deck_depth_mm') }))
     .filter((x) => x.w.value !== null && x.d.value !== null)
-    .map((x) => ({ itemId: x.s.itemId, widthMm: x.w.value!, depthMm: x.d.value!, available: x.s.qtyConfirmed ?? 0, s: x.s, dimStatus: weakest(x.w.status, x.d.status) }));
+    .map((x) => ({ itemId: x.s.itemId, widthMm: x.w.value!, depthMm: x.d.value!, available: lim(x.s), s: x.s, dimStatus: weakest(x.w.status, x.d.status) }));
   const tiling = deckOpts.length ? tileStage(SW, SD, deckOpts, P.stage.deckItemId) : null;
   const deckCounts: Record<string, number> = tiling?.counts ?? {};
 
@@ -273,7 +284,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     return { edge, cands, rule: edge?.quantity ?? ({ kind: 'per_unit', ratio: 4 } as const) };
   };
   const legsNeeded = Object.entries(deckCounts).reduce((a, [id, n]) => a + requiredQuantity(legRuleFor(stock.find((x) => x.itemId === id)!).rule, n), 0);
-  const ownedCovering = (h: number) => legCands.filter((l) => covers(l, h)).reduce((a, l) => a + (l.s.qtyConfirmed ?? 0), 0);
+  const ownedCovering = (h: number) => legCands.filter((l) => covers(l, h)).reduce((a, l) => a + lim(l.s), 0);
 
   let stageH = P.stage.heightMm;
   let stageHStatus: Confidence = stageH !== null ? pStat(P, 'stage.heightMm') : 'ESTIMATED';
@@ -344,7 +355,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
         status: deckOpts.find((o) => o.itemId === dk.itemId)!.dimStatus,
       });
     });
-    const short = Object.entries(deckCounts).filter(([id, n]) => n > (alloc.byId(id)!.qtyConfirmed ?? 0));
+    const short = Object.entries(deckCounts).filter(([id, n]) => n > lim(alloc.byId(id)));
     const dStat = weakest(...Object.keys(deckCounts).map((id) => deckOpts.find((o) => o.itemId === id)!.dimStatus));
     checks.push({
       id: 'stage.decks',
@@ -373,7 +384,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       const deckT = spec(deck.specs, 'deck_thickness_mm').value;
       const fits = cands.filter((l) => covers(l, stageH!) || (deckT !== null && covers(l, stageH! - deckT)));
       // Prefer fixed-height legs, then the leg with most confirmed stock; mix products that fit.
-      const ordered = [...fits].sort((a, b) => (a.max - a.min) - (b.max - b.min) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0));
+      const ordered = [...fits].sort((a, b) => (a.max - a.min) - (b.max - b.min) || lim(b.s) - lim(a.s));
       const match = ordered[0];
       if (!edge) {
         assumptions.push({ id: `legs:${deckId}`, text: `${deck.product}: 4 legs per deck assumed (no REQUIRES relationship recorded)`, status: 'ESTIMATED', source: DEFAULT });
@@ -452,7 +463,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       .filter((x) => x.grid !== null)
       .sort((a, b) => {
         const pref = (x: typeof a) => (P.led.panelItemId === x.s.itemId ? 0 : 1);
-        const stockOk = (x: typeof a) => ((x.s.qtyConfirmed ?? 0) >= x.grid!.count ? 0 : 1);
+        const stockOk = (x: typeof a) => (lim(x.s) >= x.grid!.count ? 0 : 1);
         const outdoor = (x: typeof a) => (/outdoor/i.test(x.s.product) ? 1 : 0);
         return pref(a) - pref(b) || stockOk(a) - stockOk(b) || outdoor(a) - outdoor(b) || (a.pitch.value ?? 99) - (b.pitch.value ?? 99) || a.s.product.localeCompare(b.s.product);
       });
@@ -493,11 +504,11 @@ export function generateDesign(ctx: DesignContext): DesignResult {
         severity: 'hard',
         result: r.shortfall ? 'FAIL' : 'PASS',
         message: r.shortfall ? `Needs ${grid.count}, ${r.allocated} allocatable${qtyNote(panel)}` : `${grid.count} allocated${qtyNote(panel)}`,
-        dataStatus: panel.qtyConfirmed === null ? 'UNKNOWN' : 'VERIFIED',
-        inputs: [{ label: 'Confirmed owned quantity', status: panel.qtyConfirmed === null ? 'UNKNOWN' : 'VERIFIED' }],
+        dataStatus: stockStatus(panel),
+        inputs: [{ label: 'Stock quantity', status: stockStatus(panel), note: stockLimit(panel, policy).basis }],
       });
-      if (r.shortfall && (panel.qtyConfirmed ?? 0) >= grid.rows) {
-        const cols = Math.floor((panel.qtyConfirmed ?? 0) / grid.rows);
+      if (r.shortfall && lim(panel) >= grid.rows) {
+        const cols = Math.floor(lim(panel) / grid.rows);
         alternatives.push(`LED ${fmtM(cols * cw)} × ${fmtM(LH)} (${cols * grid.rows} cabinets) is achievable with confirmed ${panel.product} stock`);
       }
 
@@ -549,7 +560,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
         }),
         cap: spec(s.specs, 'total_pixel_capacity').value ?? Infinity,
       }));
-      const passing = evals.filter((e) => e.res.result === 'PASS' && (e.s.qtyConfirmed ?? 0) >= 1).sort((a, b) => a.cap - b.cap);
+      const passing = evals.filter((e) => e.res.result === 'PASS' && lim(e.s) >= 1).sort((a, b) => a.cap - b.cap);
       const proc = passing[0] ?? null;
       let dataPorts: string[][] | null = null;
       if (proc) {
@@ -558,7 +569,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
         checks.push({ id: 'led.processor', title: 'LED processor capacity', discipline: 'led', severity: 'hard', result: 'PASS', message: `${proc.s.product}: ${proc.res.portsNeeded} of ${spec(proc.s.specs, 'output_ports').value} ports, ${proc.res.cabinetsPerPort} cabinets per port`, dataStatus: proc.res.status, inputs: [{ label: 'Processor specs', status: proc.res.status }] });
       } else {
         const anyUnknown = evals.some((e) => e.res.result === 'UNKNOWN');
-        const unconfirmedPass = evals.filter((e) => e.res.result === 'PASS' && (e.s.qtyConfirmed ?? 0) < 1);
+        const unconfirmedPass = evals.filter((e) => e.res.result === 'PASS' && lim(e.s) < 1);
         checks.push({
           id: 'led.processor',
           title: 'LED processor capacity',
@@ -756,7 +767,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     let reduced = false;
     for (const g of groups) {
       if (g.want <= 0) continue;
-      const pick = pickFixture(stock, g.roles, used);
+      const pick = pickFixture(stock, g.roles, used, lim);
       if (!pick) {
         missingGroup = true;
         msgs.push(`${g.label}: no fixture with a matching role (${g.roles.join(' / ')}) in inventory`);
@@ -767,7 +778,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       const n = Math.min(g.want, alloc.remaining(pick.item.itemId));
       if (n < g.want) {
         reduced = true;
-        if (n === 0) unresolved.push({ id: `lighting.${g.key}`, description: `${g.want} × ${pick.item.product}`, reason: `No confirmed owned stock${qtyNote(pick.item)}`, candidates: [pick.item.product] });
+        if (n === 0) unresolved.push({ id: `lighting.${g.key}`, description: `${g.want} × ${pick.item.product}`, reason: `No allocatable stock${qtyNote(pick.item)}`, candidates: [pick.item.product] });
       }
       if (n > 0) alloc.require(pick.item.itemId, n, `Lighting — ${g.label.toLowerCase()}`, 'ESTIMATED');
       lightStatus.push(pick.roleStatus);
@@ -917,6 +928,25 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   }
   const nonInventory = tables.length ? [{ description: `Round tables Ø${fmtM(P.seating.tableDiameterMm, 1)} with ${P.seating.seatsPerTable} chairs`, qty: tables.length, note: 'Not Sound Ninja inventory — venue or third-party furniture' }] : [];
   if (fohPoly) nonInventory.push({ description: `FOH riser/area ${fmtM(P.foh.widthMm)} × ${fmtM(P.foh.depthMm)}`, qty: 1, note: 'Space allocation only; FOH equipment not yet designed' });
+
+  // ---- Stock availability (guideline policy) -----------------------------------------------------
+  const guided = alloc.lines.filter((l) => l.allocated > 0 && l.stockBasis === 'FILE_GUIDELINE');
+  if (guided.length) {
+    const over = guided.filter((l) => l.overGuideline > 0);
+    checks.push({
+      id: 'inventory.availability',
+      title: 'Stock availability (file guideline)',
+      discipline: 'inventory',
+      severity: 'advisory',
+      result: 'WARN',
+      message: `${guided.length} item(s) allocated against file availability guidelines, not confirmed owned stock${over.length ? `; ${over.length} use the ${policy.headroomPct} % headroom: ${over.map((l) => `${l.product} +${l.overGuideline} over ${l.qtyShown}`).join(', ')}` : ''}. Check availability before quoting.`,
+      dataStatus: 'PROVISIONAL',
+      inputs: [],
+    });
+  }
+  if (policy.useFileQuantities) {
+    assumptions.push({ id: 'stock.policy', text: `Stock policy: file quantities used as availability guidelines with up to ${policy.headroomPct} % headroom; confirmed owned quantities are hard limits`, status: 'PROVISIONAL', source: { kind: 'user_confirmation', note: 'Owner decision D-016' } });
+  }
 
   // ---- Overall status ---------------------------------------------------------------------------
   const hard = checks.filter((c) => c.severity === 'hard' && c.result !== 'HUMAN_REQUIRED');

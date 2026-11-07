@@ -3,6 +3,8 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { HttpError, requirePerm } from '../auth.js';
 import { many, one } from '../db.js';
+import { audit } from '../audit.js';
+import { loadStockPolicy } from '../design.js';
 import { applyImport, confirmQuantities, listInventory, markDuplicate, rollbackTo, stageImport } from '../inventory.js';
 import { ALLOWED_MIME, detectMime, putFile } from '../storage.js';
 
@@ -11,6 +13,23 @@ export async function inventoryRoutes(app: FastifyInstance, pool: pg.Pool) {
     const u = requirePerm(req, 'inventory.read');
     const q = z.object({ snapshotId: z.string().uuid().optional() }).parse(req.query);
     return listInventory(pool, u.tenantId, q.snapshotId);
+  });
+
+  app.get('/settings/stock-policy', async (req) => {
+    const u = requirePerm(req, 'inventory.read');
+    return loadStockPolicy(pool, u.tenantId);
+  });
+
+  app.put('/settings/stock-policy', async (req) => {
+    const u = requirePerm(req, 'inventory.confirm_qty');
+    const b = z.object({ useFileQuantities: z.boolean(), headroomPct: z.number().min(0).max(100) }).parse(req.body);
+    await pool.query(
+      `INSERT INTO tenant_setting(tenant_id, key, value, updated_by) VALUES ($1,'stock_policy',$2,$3)
+       ON CONFLICT (tenant_id, key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`,
+      [u.tenantId, JSON.stringify(b), u.id],
+    );
+    await audit(pool, u, 'settings.stock_policy.updated', 'tenant', u.tenantId, b);
+    return b;
   });
 
   app.get('/inventory/snapshots', async (req) => {

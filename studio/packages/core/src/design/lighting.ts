@@ -50,13 +50,13 @@ export function defaultCounts(stageWidthMm: number, look: 'standard' | 'dramatic
  * Items with no confirmed quantity are only returned when nothing confirmed exists (so the
  * shortfall is reported against a real candidate).
  */
-export function pickFixture(stock: StockItem[], roles: FixtureRole[], exclude: Set<string> = new Set()): { item: StockItem; role: FixtureRole; roleStatus: Confidence } | null {
+export function pickFixture(stock: StockItem[], roles: FixtureRole[], exclude: Set<string> = new Set(), limit: (it: StockItem) => number = (it) => it.qtyConfirmed ?? 0): { item: StockItem; role: FixtureRole; roleStatus: Confidence } | null {
   const lights = stock.filter((s) => s.category === 'LIGHTING_FIXTURE' && !exclude.has(s.itemId)).map((s) => ({ s, r: fixtureRole(s) }));
   for (const confirmedOnly of [true, false]) {
     for (const role of roles) {
       const c = lights
-        .filter((x) => x.r.role === role && (!confirmedOnly || (x.s.qtyConfirmed ?? 0) > 0))
-        .sort((a, b) => (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0) || a.s.product.localeCompare(b.s.product));
+        .filter((x) => x.r.role === role && (!confirmedOnly || limit(x.s) > 0))
+        .sort((a, b) => limit(b.s) - limit(a.s) || a.s.product.localeCompare(b.s.product));
       if (c[0]) return { item: c[0].s, role, roleStatus: c[0].r.status };
     }
   }

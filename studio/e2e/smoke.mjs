@@ -92,7 +92,7 @@ try {
     await page.getByPlaceholder(/Basis/).fill('E2E synthetic stock count');
     await page.getByText('I confirm these are quantities').click();
     await page.getByRole('button', { name: /Accept file qty as owned/ }).click();
-    await page.getByText(/9 of 10 items are confirmed/).waitFor();
+    await page.getByText(/9 of 10 items have a confirmed quantity/).waitFor();
     await page.screenshot({ path: path.join(out, '02-inventory.png'), fullPage: true });
   });
 

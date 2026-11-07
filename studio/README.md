@@ -32,8 +32,8 @@ deployment, set `SETUP_TOKEN` first.
 
 1. **Inventory** → upload `SNI_Inventory_List_*.xlsx` (worksheet *Inventory*) or CSV → review the preview
    (column mapping, data-quality issues, new/changed/renamed/removed items) → apply as a snapshot.
-2. **Verify quantities**: the file's *Qty shown* is "available to rent" and is not allocated. Confirm owned
-   quantities (bulk-accept file quantities with an attestation, or type them).
+2. **Stock policy** (Inventory page): by default the file's *Qty shown* is used as an availability guideline and
+   designs may use up to 20 % more (flagged). Typing a confirmed owned quantity makes it a hard limit.
 3. **Equipment** pages: correct categories, record datasheet specs with sources (cabinet pixels, max power,
    processor capacity, deck sizes…), add relationships (deck REQUIRES legs, LED MOUNTS_TO frame…).
 4. **Venues**: upload a PDF/PNG/JPEG plan, record its provenance, calibrate from a known dimension plus a
@@ -48,7 +48,7 @@ deployment, set `SETUP_TOKEN` first.
 ## Tests
 
 ```bash
-pnpm --filter @sn/core test     # 149 unit tests: geometry, calibration, import, diff, taxonomy, LED, staging, lighting, generator
-TEST_DATABASE_URL=postgres://sn:sn@127.0.0.1:5432/sound_ninja_test pnpm --filter @sn/server test   # 19 API tests
+pnpm --filter @sn/core test     # 153 unit tests: geometry, calibration, import, diff, taxonomy, LED, staging, lighting, generator
+TEST_DATABASE_URL=postgres://sn:sn@127.0.0.1:5432/sound_ninja_test pnpm --filter @sn/server test   # 20 API tests
 node e2e/smoke.mjs http://127.0.0.1:8787 ./e2e-output   # browser e2e (empty DB)
 ```
