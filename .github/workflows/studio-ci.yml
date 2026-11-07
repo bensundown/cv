@@ -1,0 +1,39 @@
+name: studio-ci
+on:
+  push:
+    paths: ["studio/**", ".github/workflows/studio-ci.yml"]
+  pull_request:
+    paths: ["studio/**", ".github/workflows/studio-ci.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sn
+          POSTGRES_PASSWORD: sn
+          POSTGRES_DB: sound_ninja_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sn" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: studio/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm --filter @sn/core test
+      - run: pnpm --filter @sn/server test
+        env:
+          TEST_DATABASE_URL: postgres://sn:sn@127.0.0.1:5432/sound_ninja_test
+      - run: pnpm --filter @sn/web build
