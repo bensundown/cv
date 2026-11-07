@@ -1,9 +1,11 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { createPool } from './db.js';
+import { createPglitePool } from './db-pglite.js';
 import { migrate } from './migrate.js';
 
-const pool = createPool();
+// DB_MODE=pglite runs on an embedded database (no PostgreSQL server needed), stored in PGLITE_DIR.
+const pool = process.env.DB_MODE === 'pglite' ? await createPglitePool(process.env.PGLITE_DIR ?? 'data/db') : createPool();
 await migrate(pool, () => undefined);
 const app = await buildApp(pool, { logger: true });
 await app.listen({ port: config.port, host: config.host });

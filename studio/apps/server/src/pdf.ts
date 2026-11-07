@@ -13,7 +13,7 @@ const A3 = { w: 420, h: 297 };
 const MARGIN = 10;
 const TITLE_H = 34;
 
-const fontDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/public/brand/fonts');
+const fontDir = process.env.FONT_DIR ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/public/brand/fonts');
 function registerFonts(doc: PDFKit.PDFDocument) {
   const reg = (name: string, file: string, fallback: string) => {
     try {

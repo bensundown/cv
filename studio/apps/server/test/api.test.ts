@@ -67,8 +67,14 @@ function planPdf(): Promise<Buffer> {
 }
 
 beforeAll(async () => {
-  pool = new pg.Pool({ connectionString: TEST_DB });
-  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  if (process.env.TEST_PGLITE) {
+    // Offline/desktop mode: embedded PGlite database in a fresh temp directory.
+    const { createPglitePool } = await import('../src/db-pglite.js');
+    pool = await createPglitePool(fs.mkdtempSync(path.join(os.tmpdir(), 'sn-pglite-')));
+  } else {
+    pool = new pg.Pool({ connectionString: TEST_DB });
+    await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  }
   const { migrate } = await import('../src/migrate.js');
   await migrate(pool, () => undefined);
   const { buildApp } = await import('../src/app.js');

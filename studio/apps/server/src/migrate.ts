@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type pg from 'pg';
 import { createPool } from './db.js';
 
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
+const dir = process.env.MIGRATIONS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
 /** Apply pending SQL migrations in filename order, each in its own transaction. */
 export async function migrate(pool: pg.Pool, log = console.log): Promise<string[]> {

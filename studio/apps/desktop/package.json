@@ -1,0 +1,19 @@
+{
+  "name": "@sn/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline desktop build of Sound Ninja Design Studio (Electron shell around the embedded server)",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:win": "node build.mjs --win",
+    "build:mac": "node build.mjs --mac",
+    "build:linux": "node build.mjs --linux",
+    "build:dir": "node build.mjs --dir"
+  },
+  "devDependencies": {
+    "electron": "38.2.0",
+    "electron-builder": "26.0.12",
+    "esbuild": "0.25.12"
+  }
+}

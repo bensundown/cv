@@ -8,9 +8,11 @@
     "start": "tsx src/index.ts",
     "db:migrate": "tsx src/migrate.ts",
     "test": "vitest run",
+    "test:pglite": "TEST_PGLITE=1 vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.3.11",
     "@fastify/cookie": "11.0.2",
     "@fastify/multipart": "9.2.1",
     "@fastify/rate-limit": "10.3.0",

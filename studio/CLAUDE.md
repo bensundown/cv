@@ -49,5 +49,12 @@ pnpm --filter @sn/server test        # API integration tests (needs Postgres, TE
 pnpm typecheck
 pnpm --filter @sn/web build
 node e2e/smoke.mjs http://127.0.0.1:8787 ./e2e-output   # browser e2e on an EMPTY database
+pnpm --filter @sn/server test:pglite  # API tests on the embedded PGlite database (offline mode)
+pnpm desktop:build                    # offline Electron app for the current OS → release/desktop/
+```
+Offline mode: `apps/server/src/db-pglite.ts` adapts PGlite to the pg.Pool subset we use (single connection,
+mutex-serialised). Keep SQL portable to both (no extensions beyond core). `apps/desktop/main.mjs` sets
+STORAGE_DIR/WEB_DIST/MIGRATIONS_DIR/FONT_DIR before importing the bundled `embedded.mjs`.
+```text
 ```
 Test data is synthetic and labelled as such. Never commit real client or inventory data to fixtures.

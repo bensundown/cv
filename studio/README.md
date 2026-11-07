@@ -8,7 +8,21 @@ validation report that says exactly what is verified and what is not.
 **Status:** Phase 1 foundation + first Phase 2 vertical slice. See `docs/06-roadmap.md` for what is and
 is not built.
 
-## Run locally
+## Offline desktop app (no internet, no database server)
+
+The studio also runs as a desktop app on Windows, macOS and Linux. Everything stays on the computer:
+an embedded database (PGlite — PostgreSQL compiled to WebAssembly) and local file storage in the
+user's app-data folder (*File → Open data folder* to back it up). The window talks only to a server
+inside the app on 127.0.0.1; nothing is exposed to the network.
+
+- **Get the installer:** GitHub → *Actions* → **studio-desktop** → latest run → *Artifacts*
+  (`…-Windows` = `.exe` installer, `…-macOS` = `.dmg`, `…-Linux` = `.AppImage`). Builds are unsigned:
+  Windows SmartScreen → *More info → Run anyway*; macOS → right-click the app → *Open* (or
+  `xattr -cr "/Applications/Sound Ninja Design Studio.app"`).
+- **Build it yourself:** `pnpm install && pnpm desktop:build` (builds for the current OS into `release/desktop/`).
+- **Run the server without PostgreSQL:** `DB_MODE=pglite PGLITE_DIR=./data/db pnpm start`.
+
+## Run locally (server + PostgreSQL)
 
 Requirements: Node 22+, pnpm 10, PostgreSQL 16 (or Docker).
 
