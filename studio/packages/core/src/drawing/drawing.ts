@@ -95,6 +95,19 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     const pe = patchOf.get(l.id);
     if (pe) P.push({ t: 'text', at: { x: l.position.x + 380, y: l.position.y }, text: `${pe.universe}.${pe.address}`, size: 1.2, color: COLORS.grey });
   }
+  // Stage access: stairs (with tread lines) and edge-protection rails.
+  for (const a of scene.objects.filter((x) => x.kind === 'stage_accessory')) {
+    if (a.meta?.type === 'stairs' && a.polygon) {
+      P.push({ t: 'poly', pts: a.polygon, closed: true, stroke: COLORS.ink, fill: '#FFFFFF', weight: 0.3 });
+      const [p0, p1, p2, p3] = a.polygon as [Pt, Pt, Pt, Pt];
+      for (let k = 1; k < 4; k++) {
+        const t = k / 4;
+        P.push({ t: 'poly', pts: [{ x: p0.x + (p3.x - p0.x) * t, y: p0.y + (p3.y - p0.y) * t }, { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t }], closed: false, stroke: COLORS.grey, weight: 0.15 });
+      }
+    } else if (a.meta?.type === 'rail' && a.polygon) {
+      P.push({ t: 'poly', pts: a.polygon, closed: true, stroke: COLORS.amber, fill: COLORS.amber, weight: 0.2 });
+    }
+  }
   // Loudspeaker stacks (one footprint per side; label = box counts).
   const sp = scene.objects.filter((x) => x.kind === 'speaker');
   for (const side of [-1, 1]) {
@@ -150,6 +163,7 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     notes: [
       'All dimensions in metres. Plan coordinates in millimetres internally.',
       'Dashed outlines: geometry that is not VERIFIED. Red dashed: equipment short of confirmed stock.',
+      ...(scene.objects.some((o) => o.kind === 'stage_accessory') ? ['Stage access: hatched = stairs; amber edge = edge-protection rails (concept — competent person to confirm).'] : []),
       ...(scene.objects.some((o) => o.kind === 'speaker') ? ['Audio: L/R = PA stacks (tops + S subs), ground-stacked; SB = stage box. Concept only — coverage not modelled.'] : []),
       ...(scene.lightingPlan ? ['Lighting: MS moving spot · MW moving wash · B beam · W wash · PAR · P profile · ST strobe; label = DMX universe.address. Positions are conceptual (floor-mounted on deck).'] : []),
       ...(opts.precisionNote ? [opts.precisionNote] : []),

@@ -200,6 +200,14 @@ export const Scene3D = forwardRef<Scene3DHandle, { scene: Scene; viewpoint: stri
       });
     }
 
+    // Stairs & rails (display: stairs as a block, rails as a thin bar at handrail height).
+    const stairMat = new THREE.MeshStandardMaterial({ color: '#1B1B1E', roughness: 0.6 });
+    const railMat = new THREE.MeshStandardMaterial({ color: '#9A9AA0', metalness: 0.8, roughness: 0.3 });
+    for (const o of scene.objects.filter((x) => x.kind === 'stage_accessory')) {
+      if (o.meta?.type === 'rail') box({ ...o, position: { ...o.position, z: o.position.z + 950 }, size: { ...o.size, z: 50 } }, railMat);
+      else box(o, stairMat);
+    }
+
     // Loudspeakers & stage box (physical boxes are placeholders where dimensions are unknown).
     const cabMatA = new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.8 });
     for (const o of scene.objects.filter((x) => x.kind === 'speaker' || x.kind === 'audio_device')) box(o, cabMatA, 10);

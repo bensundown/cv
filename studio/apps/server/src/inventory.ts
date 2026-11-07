@@ -125,6 +125,10 @@ const HINT_SPEC: [keyof ReturnType<typeof parseNameHints>, string, string][] = [
   ['legHeightMm', 'leg_height_mm', 'mm'],
   ['legHeightMinMm', 'leg_height_min_mm', 'mm'],
   ['legHeightMaxMm', 'leg_height_max_mm', 'mm'],
+  ['stairHeightMm', 'stair_height_mm', 'mm'],
+  ['stairHeightMinMm', 'stair_height_min_mm', 'mm'],
+  ['stairHeightMaxMm', 'stair_height_max_mm', 'mm'],
+  ['railLengthMm', 'rail_length_mm', 'mm'],
 ];
 
 /**
@@ -188,16 +192,16 @@ export async function applyRelationshipLibrary(c: Q, tenantId: string, rows: { i
 /** Apply the library to every model in the current inventory. */
 export async function applySpecLibrary(pool: pg.Pool, user: SessionUser) {
   return tx(pool, async (c) => {
-    const rows = await many<{ id: string; product: string }>(
+    const rows = await many<{ id: string; product: string; category: EngineeringCategory }>(
       c,
-      `SELECT DISTINCT pm.id, si.product FROM inventory_snapshot_item si JOIN inventory_snapshot s ON s.id=si.snapshot_id AND s.is_current
+      `SELECT DISTINCT pm.id, si.product, pm.category FROM inventory_snapshot_item si JOIN inventory_snapshot s ON s.id=si.snapshot_id AND s.is_current
        JOIN inventory_item ii ON ii.id=si.item_id JOIN product_model pm ON pm.id=ii.product_model_id WHERE s.tenant_id=$1`,
       [user.tenantId],
     );
     let written = 0;
     let models = 0;
     for (const r of rows) {
-      const n = await applySpecLibraryToModel(c, r.id, r.product);
+      const n = (await applyNameHints(c, r.id, r.product, r.category)) + (await applySpecLibraryToModel(c, r.id, r.product));
       written += n;
       if (n) models++;
     }
@@ -221,18 +225,26 @@ async function ensureModel(c: Q, tenantId: string, product: string, group: strin
     `SELECT id, category FROM product_model WHERE tenant_id=$1 AND manufacturer IS NOT DISTINCT FROM $2 AND model=$3 AND variant=''`,
     [tenantId, manufacturer, model],
   ))!;
-  const hints = parseNameHints(product, m.category);
+  await applyNameHints(c, m.id, product, m.category);
+  await applySpecLibraryToModel(c, m.id, product);
+  return m.id;
+}
+
+/** Insert name-parsed hints (ESTIMATED) for keys that have no current value. Returns values written. */
+export async function applyNameHints(c: Q, modelId: string, product: string, category: EngineeringCategory): Promise<number> {
+  const hints = parseNameHints(product, category);
+  let n = 0;
   for (const [hk, key, unit] of HINT_SPEC) {
     const v = hints[hk];
     if (typeof v !== 'number') continue;
-    await c.query(
+    const r = await c.query(
       `INSERT INTO spec_value(product_model_id, key, value_num, unit, status, source)
        SELECT $1,$2,$3,$4,'ESTIMATED',$5 WHERE NOT EXISTS (SELECT 1 FROM spec_value WHERE product_model_id=$1 AND key=$2 AND superseded_at IS NULL)`,
-      [m.id, key, v, unit, JSON.stringify({ kind: 'name_parse', ref: `Product name “${product}”`, note: `Parsed from inventory product name${hints.unitInferred ? ' (unit not stated — metres inferred)' : ''} — confirm against the item or datasheet` })],
+      [modelId, key, v, unit, JSON.stringify({ kind: 'name_parse', ref: `Product name “${product}”`, note: `Parsed from inventory product name${hints.unitInferred ? ' (unit not stated — metres inferred)' : ''} — confirm against the item or datasheet` })],
     );
+    n += r.rowCount ?? 0;
   }
-  await applySpecLibraryToModel(c, m.id, product);
-  return m.id;
+  return n;
 }
 
 export async function applyImport(pool: pg.Pool, user: SessionUser, importId: string, d: ApplyDecisions) {

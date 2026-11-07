@@ -56,6 +56,11 @@ export interface DesignParams {
     upstageClearanceMm: number; // gap between back wall and stage rear (LED service access)
     offsetAlongWallMm: number;
     deckItemId: string | null; // user preference
+    /** Number of stair units (1 = front; 2 = front + side; 3 = + other side; 4 = + second front). */
+    stairs: number;
+    edgeProtection: boolean;
+    /** Edge protection is laid out when the stage is at least this high (design default; check local rules). */
+    edgeProtectionAboveMm: number;
   };
   led: {
     enabled: boolean;
@@ -108,7 +113,7 @@ export type Supply = 'OWNED' | 'SHORTFALL' | 'NOT_INVENTORY';
 
 export interface SceneObject {
   id: string;
-  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone' | 'light_fixture' | 'speaker' | 'audio_device';
+  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone' | 'light_fixture' | 'speaker' | 'audio_device' | 'stage_accessory';
   label: string;
   /** Footprint centre (plan mm) and base elevation z (mm above finished floor). */
   position: { x: number; y: number; z: number };

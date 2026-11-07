@@ -58,7 +58,7 @@ export function defaultParams(): DesignParams {
     eventType: null,
     guests: null,
     aesthetic: null,
-    stage: { widthMm: 8000, depthMm: 4000, heightMm: null, upstageClearanceMm: 1500, offsetAlongWallMm: 0, deckItemId: null },
+    stage: { widthMm: 8000, depthMm: 4000, heightMm: null, upstageClearanceMm: 1500, offsetAlongWallMm: 0, deckItemId: null, stairs: 2, edgeProtection: true, edgeProtectionAboveMm: 600 },
     led: { enabled: true, widthMm: 6000, heightMm: 3000, bottomAboveStageMm: 0, setbackFromStageRearMm: 500, panelItemId: null, processorItemId: null },
     foh: { position: 'auto', widthMm: 3000, depthMm: 2000, rearClearanceMm: 1500 },
     seating: { style: 'rounds', seatsPerTable: 10, tableDiameterMm: 1800, pitchMm: 3300, frontClearanceMm: 3000, wallClearanceMm: 1000 },
@@ -88,7 +88,7 @@ export function defaultParams(): DesignParams {
 /** Fill parameter groups added after a revision was stored (older revisions stay valid). */
 export function normalizeParams(p: DesignParams): DesignParams {
   const d = defaultParams();
-  return { ...d, ...p, lighting: { ...d.lighting, ...(p.lighting ?? {}) }, audio: { ...d.audio, ...(p.audio ?? {}) }, power: { ...d.power, ...(p.power ?? {}) }, sources: { ...(p.sources ?? {}) } };
+  return { ...d, ...p, stage: { ...d.stage, ...(p.stage ?? {}) }, led: { ...d.led, ...(p.led ?? {}) }, foh: { ...d.foh, ...(p.foh ?? {}) }, seating: { ...d.seating, ...(p.seating ?? {}) }, lighting: { ...d.lighting, ...(p.lighting ?? {}) }, audio: { ...d.audio, ...(p.audio ?? {}) }, power: { ...d.power, ...(p.power ?? {}) }, sources: { ...(p.sources ?? {}) } };
 }
 
 /**
@@ -438,20 +438,6 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     dataStatus: deckRated.length ? weakest(...deckRated.map((r) => r.status)) : 'UNKNOWN',
     inputs: [],
   });
-  const hasAccess = stock.some((s) => s.category === 'STAGE_ACCESSORY' && /stair|step/i.test(s.product));
-  checks.push({
-    id: 'stage.access',
-    title: 'Stage access (stairs / handrails / edge protection)',
-    discipline: 'staging',
-    severity: 'advisory',
-    result: 'WARN',
-    message: hasAccess
-      ? 'Stair equipment exists in inventory but access is not yet laid out by the engine. Add stairs, handrails and edge protection before issue.'
-      : 'No stair / access equipment identified in inventory. Stage access must be added (owned or hired).',
-    dataStatus: 'UNKNOWN',
-    inputs: [],
-  });
-
   // ---- LED wall -----------------------------------------------------------------------------
   let ledPlan: LedPlan | null = null;
   if (P.led.enabled) {
@@ -887,6 +873,133 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     }
   }
 
+  // ---- Stage access: stairs & edge protection (concept) -------------------------------------------
+  const extraHuman: string[] = [];
+  {
+    const S = P.stage;
+    const H = stageH!;
+    const access = stock.filter((s) => s.category === 'STAGE_ACCESSORY' && lim(s) > 0);
+    const stairCands = access
+      .filter((s) => /stairs?|steps?/i.test(s.product) && !/handrail/i.test(s.product))
+      .map((s) => {
+        const f = spec(s.specs, 'stair_height_mm');
+        const lo = spec(s.specs, 'stair_height_min_mm');
+        const hi = spec(s.specs, 'stair_height_max_mm');
+        if (lo.value !== null && hi.value !== null) return { s, min: lo.value, max: hi.value, adjustable: true };
+        if (f.value !== null) return { s, min: f.value - 50, max: f.value + 50, adjustable: false };
+        return null;
+      })
+      .filter((x): x is { s: StockItem; min: number; max: number; adjustable: boolean } => x !== null && H >= x.min && H <= x.max)
+      .sort((a, b) => Number(b.adjustable) - Number(a.adjustable) || lim(b.s) - lim(a.s));
+    const depth = Math.max(900, Math.round(H * 1.4));
+    const slots = [
+      { key: 'front-left', lx: -SW / 2 + 1500, ly: stageFrontLy + depth / 2, w: 1000, d: depth, label: 'Front stairs (presenters / audience)' },
+      { key: 'side-right', lx: SW / 2 + depth / 2, ly: upc + 1200, w: depth, d: 1000, label: 'Side stairs (crew / backstage)' },
+      { key: 'side-left', lx: -SW / 2 - depth / 2, ly: upc + 1200, w: depth, d: 1000, label: 'Side stairs (crew / backstage)' },
+      { key: 'front-right', lx: SW / 2 - 1500, ly: stageFrontLy + depth / 2, w: 1000, d: depth, label: 'Front stairs' },
+    ].slice(0, Math.max(0, Math.min(4, S.stairs)));
+    const footprint = (o: SceneObject) => (o.polygon ? o.polygon : rectPolygon({ x: o.position.x, y: o.position.y }, o.size.x, o.size.y, o.rotationDeg));
+    const blockers = () => objects.filter((o) => ['speaker', 'table', 'foh'].includes(o.kind));
+    const placed: string[] = [];
+    const conflicts: string[] = [];
+    let stairShort = 0;
+    const stairItemsUsed: StockItem[] = [];
+    for (const sl of slots) {
+      const cand = stairCands.find((c) => alloc.remaining(c.s.itemId) > 0);
+      if (!cand) {
+        stairShort++;
+        continue;
+      }
+      alloc.require(cand.s.itemId, 1, `Stage access — ${sl.label.toLowerCase()}`, 'ESTIMATED');
+      stairItemsUsed.push(cand.s);
+      const poly = rect(sl.lx, sl.ly, sl.w, sl.d);
+      const hits = [
+        ...(!polygonInside(poly, roomPoly) ? ['room boundary'] : []),
+        ...V.obstacles.filter((o) => polygonsOverlap(poly, o.polygon)).map((o) => o.label),
+        ...blockers().filter((o) => polygonsOverlap(poly, footprint(o))).map((o) => o.label),
+      ];
+      if (hits.length) conflicts.push(`${sl.label}: clashes with ${[...new Set(hits)].join(', ')}`);
+      objects.push({ id: `stairs-${sl.key}`, kind: 'stage_accessory', label: cand.s.product, position: { ...W(sl.lx, sl.ly), z: 0 }, rotationDeg, size: { x: sl.w, y: sl.d, z: H }, polygon: poly, itemId: cand.s.itemId, supply: 'OWNED', status: 'ESTIMATED', meta: { type: 'stairs', slot: sl.key } });
+      placed.push(`${sl.label}: ${cand.s.product}`);
+    }
+    // Dedicated stair handrails (same maker as the stair unit), 2 per stair (ESTIMATED).
+    const stairRail = access.find((s) => /handrail/i.test(s.product) && /stair/i.test(s.product));
+    let stairRailsMsg = '';
+    if (stairRail) {
+      const n = stairItemsUsed.filter((st) => guessManufacturer(st.product) && guessManufacturer(st.product) === guessManufacturer(stairRail.product)).length * 2;
+      if (n) {
+        const r = alloc.require(stairRail.itemId, n, 'Stage access — stair handrails (2 per stair)', 'ESTIMATED');
+        stairRailsMsg = ` · ${r.allocated} × ${stairRail.product}${r.shortfall ? ` (short ${r.shortfall})` : ''}`;
+      }
+    }
+    if (S.stairs > 0) {
+      if (!stairCands.length) unresolved.push({ id: 'stage.stairs', description: `${S.stairs} stair unit(s) for a ${fmtM(H)} stage`, reason: 'No stairs/steps with a recorded height covering this stage height', candidates: access.filter((s) => /stairs?|steps?/i.test(s.product)).map((s) => s.product) });
+      checks.push({
+        id: 'stage.access',
+        title: 'Stage access (stairs)',
+        discipline: 'staging',
+        severity: 'advisory',
+        result: stairShort || conflicts.length ? 'WARN' : 'PASS',
+        message: `${placed.join(' · ') || 'No stairs placed'}${stairRailsMsg}${stairShort ? ` · ${stairShort} stair unit(s) short for ${fmtM(H)}` : ''}${conflicts.length ? ` · ${conflicts.join('; ')}` : ''}`,
+        dataStatus: 'ESTIMATED',
+        inputs: [{ label: 'Stair heights', status: 'ESTIMATED', note: 'parsed from product names' }],
+      });
+      assumptions.push({ id: 'stage.stairs', text: `${S.stairs} stair unit(s): front-left for presenters, then side/backstage; stair footprint ≈ ${fmtM(depth, 1)} deep (estimated from height)`, status: 'ESTIMATED', source: DEFAULT });
+    }
+
+    // Edge protection along the rear and sides (front is the performance edge).
+    if (S.edgeProtection && H >= S.edgeProtectionAboveMm) {
+      const rails = access
+        .filter((s) => /handrail|guard ?rail/i.test(s.product) && !/stair/i.test(s.product))
+        .map((s) => ({ s, len: spec(s.specs, 'rail_length_mm').value }))
+        .filter((x): x is { s: StockItem; len: number } => x.len !== null && x.len > 0)
+        .sort((a, b) => b.len - a.len);
+      const sideOpening = (side: 'left' | 'right') => (slots.some((sl) => sl.key === `side-${side}`) ? 1000 : 0);
+      const edges = [
+        { key: 'rear', len: SW, a: [-SW / 2, upc], b: [SW / 2, upc] },
+        { key: 'left', len: SD - sideOpening('left'), a: [-SW / 2, upc + sideOpening('left')], b: [-SW / 2, stageFrontLy] },
+        { key: 'right', len: SD - sideOpening('right'), a: [SW / 2, upc + sideOpening('right')], b: [SW / 2, stageFrontLy] },
+      ];
+      const counts = new Map<string, number>();
+      let total = 0;
+      for (const e of edges) {
+        let left = e.len;
+        while (left > 1 && rails.length) {
+          // Longest rail that fits and still has stock; then any rail with stock; finally the shortest (reported short).
+          const avail = (r: { s: StockItem }) => alloc.remaining(r.s.itemId) - (counts.get(r.s.itemId) ?? 0) > 0;
+          const pick = rails.find((r) => r.len <= left + 1 && avail(r)) ?? [...rails].reverse().find(avail) ?? rails[rails.length - 1]!;
+          counts.set(pick.s.itemId, (counts.get(pick.s.itemId) ?? 0) + 1);
+          left -= pick.len;
+        }
+        total += e.len;
+        const [ax, ay] = e.a as [number, number];
+        const [bx, by] = e.b as [number, number];
+        const horizontal = e.key === 'rear';
+        objects.push({ id: `rail-${e.key}`, kind: 'stage_accessory', label: `Edge protection (${e.key})`, position: { ...W((ax + bx) / 2, (ay + by) / 2), z: H }, rotationDeg, size: { x: horizontal ? e.len : 50, y: horizontal ? 50 : e.len, z: 1000 }, polygon: rect((ax + bx) / 2, (ay + by) / 2, horizontal ? e.len : 60, horizontal ? 60 : e.len), supply: 'OWNED', status: 'ESTIMATED', meta: { type: 'rail', edge: e.key } });
+      }
+      const railMsgs: string[] = [];
+      let railShort = 0;
+      for (const [id, n] of counts) {
+        const r = alloc.require(id, n, 'Stage edge protection (rear & sides)', 'ESTIMATED');
+        railShort += r.shortfall;
+        railMsgs.push(`${n} × ${alloc.byId(id)!.product}${r.shortfall ? ` (short ${r.shortfall})` : ''}`);
+      }
+      if (!rails.length) unresolved.push({ id: 'stage.edge', description: `${fmtM(total)} of edge protection (rear & sides)`, reason: 'No handrail with a recorded length in inventory', candidates: access.filter((s) => /rail/i.test(s.product)).map((s) => s.product) });
+      const title = 'Stage edge protection';
+      extraHuman.push(title);
+      checks.push({
+        id: 'stage.edge',
+        title,
+        discipline: 'safety',
+        severity: 'hard',
+        result: 'HUMAN_REQUIRED',
+        message: `Concept: ${fmtM(total)} of handrail on the rear and sides of a ${fmtM(H)} stage (${railMsgs.join(', ') || 'no rails available'})${railShort ? ` — short ${railShort} rail(s)` : ''}. Requirement, height, toe boards and fixing must be confirmed by a competent person (laid out because the stage is ≥ ${fmtM(S.edgeProtectionAboveMm)} — design default; check local rules).`,
+        dataStatus: 'ESTIMATED',
+        inputs: [],
+      });
+    }
+  }
+
   // ---- Lighting (floor-mounted on the stage deck; front light & truss not designed) ---------------
   let lightingPlan: LightingPlan | null = null;
   if (P.lighting.enabled) {
@@ -1132,7 +1245,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     validation: {
       checks,
       overall,
-      humanApprovalsRequired: human.map(([, t]) => t),
+      humanApprovalsRequired: [...human.map(([, t]) => t), ...extraHuman],
       notCertification:
         'This automatically generated design is not structural, electrical, rigging or crowd-safety certification. Safety-critical approval remains with competent human professionals.',
     },

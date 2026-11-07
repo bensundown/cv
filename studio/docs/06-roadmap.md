@@ -19,6 +19,7 @@ Legend: ✅ done in this delivery · ◐ partly · ☐ next
 
 ✅ Audio first pass: PA concept (mains/subs/stacking), console + stage box pairing, snake length, wireless, commands (“add/remove sound”, “4 boxes per side”, “2 subs per side”, “use point source / line arrays”, “4 handheld mics”).
 ✅ Spec library: researched manufacturer specs with sources, auto-applied, self-correcting.
+✅ Stage access: stairs matched to stage height (front + side), stair handrails, edge-protection rails on rear/sides (human sign-off), clash checks; commands “3 stairs”, “no stairs”, “no edge protection”.
 
 - Spec enrichment workflow from manufacturer documents (upload datasheet → extract → reviewer verifies).
 - Relationship templates per family (AluStage decks/legs, Leyard cabinets/frames, Novastar outputs, QUAD 290/OV40 connectors).

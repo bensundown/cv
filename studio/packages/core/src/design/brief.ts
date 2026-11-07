@@ -179,6 +179,11 @@ export function interpretCommand(text: string): CommandResult {
   if (/\b(less dramatic|standard lighting|softer lighting|subtle lighting)\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.look', value: 'standard', note });
   if (/\b(remove|no|without) (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: false, note });
   else if (/\badd (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  // Stage access
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:sets? of )?(?:stairs|steps|stair units?)\b`, 'i')))) ops.push({ op: 'set', path: 'stage.stairs', value: toNum(m[1]!), note });
+  else if (/\b(no|remove|without)( the)? (stairs|steps)\b/i.test(t)) ops.push({ op: 'set', path: 'stage.stairs', value: 0, note });
+  if (/\b(no|remove|without)( the)? (edge protection|handrails?|guard ?rails?)\b/i.test(t)) ops.push({ op: 'set', path: 'stage.edgeProtection', value: false, note });
+  else if (/\badd (edge protection|handrails?|guard ?rails?)\b/i.test(t)) ops.push({ op: 'set', path: 'stage.edgeProtection', value: true, note });
   // Audio
   if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:line ?array )?(?:boxes|cabinets|tops) (?:a |per )side`, 'i')))) {
     ops.push({ op: 'set', path: 'audio.boxesPerSide', value: toNum(m[1]!), note }, { op: 'set', path: 'audio.enabled', value: true, note });

@@ -180,6 +180,12 @@ export interface NameHints {
   legHeightMinMm?: number;
   legHeightMaxMm?: number;
   trussLengthMm?: number;
+  /** Stairs / steps: platform height served (fixed or adjustable range). */
+  stairHeightMm?: number;
+  stairHeightMinMm?: number;
+  stairHeightMaxMm?: number;
+  /** Handrail / guard rail length. */
+  railLengthMm?: number;
   outdoor?: boolean;
   /** True when a size pair had no units and metres were inferred. */
   unitInferred?: boolean;
@@ -237,6 +243,22 @@ export function parseNameHints(product: string, category: EngineeringCategory): 
     } else {
       const single = s.match(/(\d+(?:[.,]\d+)?)\s?(mm|cm|m)\b/i);
       if (single) h.legHeightMm = toMm(num(single[1]!), single[2]!.toLowerCase());
+    }
+  }
+  if (category === 'STAGE_ACCESSORY') {
+    if (/stairs?|steps?/i.test(s)) {
+      const range = s.match(/(\d+(?:[.,]\d+)?)\s?(mm|cm|m)?\s?(?:-|–|to)\s?(\d+(?:[.,]\d+)?)\s?(mm|cm|m)\b/i);
+      if (range) {
+        const u2 = range[4]!.toLowerCase();
+        h.stairHeightMinMm = toMm(num(range[1]!), range[2]?.toLowerCase() ?? u2);
+        h.stairHeightMaxMm = toMm(num(range[3]!), u2);
+      } else {
+        const single = s.match(/(\d+(?:[.,]\d+)?)\s?(mm|cm|m)\b/i);
+        if (single) h.stairHeightMm = toMm(num(single[1]!), single[2]!.toLowerCase());
+      }
+    } else if (/handrail|guard ?rail/i.test(s)) {
+      const single = s.match(/(\d+(?:[.,]\d+)?)\s?(mm|cm|m)\b/i);
+      if (single) h.railLengthMm = toMm(num(single[1]!), single[2]!.toLowerCase());
     }
   }
   if (category === 'TRUSS') {
