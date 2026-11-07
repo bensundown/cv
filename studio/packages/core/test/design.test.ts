@@ -204,6 +204,12 @@ describe('design generation (end-to-end, synthetic)', () => {
     expect(r.assumptions.some((a) => a.id === 'venue:ceiling')).toBe(true);
   });
 
+  it('a recorded value whose status is UNKNOWN is never used', () => {
+    const v = ballroom({ ceilingHeight: { value: 8000, status: 'UNKNOWN', source: { kind: 'user_entry' } } });
+    const r = generateDesign({ params: galaParams(), venue: v, stock: fullStock(), relationships: [] });
+    expect(r.validation.checks.find((c) => c.id === 'led.ceiling')!.result).toBe('UNKNOWN');
+  });
+
   it('uses REQUIRES relationships for leg quantities and MOUNTS_TO for LED hardware', () => {
     const rel: EquipmentRelationship[] = [
       { id: 'r1', type: 'REQUIRES', fromModelId: 'model-deck21', to: { category: 'STAGE_LEG' }, quantity: { kind: 'per_unit', ratio: 2 }, constraints: {}, evidence: [], status: 'VERIFIED' },

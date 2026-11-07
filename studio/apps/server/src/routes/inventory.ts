@@ -89,7 +89,7 @@ export async function inventoryRoutes(app: FastifyInstance, pool: pg.Pool) {
       for (const id of b.acceptShownFor) {
         const r = rows.find((x) => x.itemId === id);
         if (!r) throw new HttpError(404, `Item ${id} is not in the current inventory`);
-        if (r.qtyShown === null || !Number.isInteger(r.qtyShown) || r.qtyShown < 0) throw new HttpError(422, `“${r.product}” has no valid file quantity to accept — enter the owned quantity instead`);
+        if (r.qtyShown === null || !Number.isInteger(r.qtyShown) || r.qtyShown <= 0) throw new HttpError(422, `“${r.product}” has no positive file quantity to accept (blank, zero or fractional) — enter the owned quantity explicitly`);
         items.push({ itemId: id, qtyOwned: r.qtyShown });
       }
     }

@@ -108,6 +108,7 @@ export async function venueRoutes(app: FastifyInstance, pool: pg.Pool) {
       .parse(req.body);
     const venue = await one<{ id: string }>(pool, 'SELECT id FROM venue WHERE id=$1 AND tenant_id=$2', [id, u.tenantId]);
     if (!venue) throw new HttpError(404, 'Venue not found');
+    if (b.ceilingHeight.valueMm !== null && b.ceilingHeight.status === 'UNKNOWN') throw new HttpError(422, 'A ceiling height was entered with status UNKNOWN. Choose ESTIMATED for a guess, or PROVISIONAL/VERIFIED with a source — or leave the value blank.');
     if (b.ceilingHeight.status === 'VERIFIED' && b.ceilingHeight.sourceNote.trim().length < 3) throw new HttpError(422, 'A VERIFIED ceiling height needs a source note');
 
     let geometry: StoredGeometry;

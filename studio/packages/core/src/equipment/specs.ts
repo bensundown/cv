@@ -49,7 +49,8 @@ export type SpecSheet = Record<string, SpecValue>;
 
 export function spec(sheet: SpecSheet | undefined, key: string): Sourced<number> {
   const v = sheet?.[key];
-  if (!v || v.value === null || typeof v.value !== 'number' || Number.isNaN(v.value)) {
+  // A value whose status is UNKNOWN is never used, even if a number was recorded.
+  if (!v || v.value === null || typeof v.value !== 'number' || Number.isNaN(v.value) || v.status === 'UNKNOWN') {
     return { value: null, status: 'UNKNOWN', source: { kind: 'derived', note: `Spec "${key}" not recorded` }, unit: SPEC_KEY_MAP.get(key)?.unit ?? '' };
   }
   return { value: v.value, status: v.status, source: v.source, unit: v.unit };

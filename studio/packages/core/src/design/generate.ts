@@ -142,7 +142,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       assumptions.push({ id: `param:${key}`, text: `${key} uses a design default`, status: ps.status, source: ps.source });
     }
   }
-  if (V.ceilingHeight.status === 'UNKNOWN') assumptions.push({ id: 'venue:ceiling', text: 'Ceiling height is unknown', status: 'UNKNOWN', source: V.ceilingHeight.source });
+  if (V.ceilingHeight.status === 'UNKNOWN' || V.ceilingHeight.value === null) assumptions.push({ id: 'venue:ceiling', text: 'Ceiling height is unknown', status: 'UNKNOWN', source: V.ceilingHeight.source });
   assumptions.push({
     id: 'venue:plan',
     text: `Room outline from ${V.roomSource.ref ?? V.roomSource.kind}; calibration ${V.calibrationStatus}${V.calibrationRelUncertainty !== null ? ` (±${(V.calibrationRelUncertainty * 100).toFixed(2)} % scale, 1σ)` : ''}`,
@@ -508,7 +508,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       const compat = proc && panel.modelId && proc.s.modelId ? findEdge(G, panel.modelId, 'CONTROLLED_BY', proc.s.modelId) ?? findEdge(G, panel.modelId, 'COMPATIBLE_WITH', proc.s.modelId) ?? findEdge(G, proc.s.modelId, 'COMPATIBLE_WITH', panel.modelId) : undefined;
       checks.push({
         id: 'led.compat',
-        title: 'LED panel ↔ processor compatibility',
+        title: 'LED panel / processor compatibility',
         discipline: 'led',
         severity: 'hard',
         result: compat ? 'PASS' : 'UNKNOWN',
@@ -562,7 +562,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
 
       // Ceiling clearance.
       const top = z0 + LH;
-      const ceil = V.ceilingHeight;
+      const ceil: Sourced<number> = V.ceilingHeight.status === 'UNKNOWN' ? { ...V.ceilingHeight, value: null } : V.ceilingHeight;
       checks.push({
         id: 'led.ceiling',
         title: 'LED height vs ceiling',
