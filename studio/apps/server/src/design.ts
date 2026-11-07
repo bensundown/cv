@@ -4,6 +4,7 @@ import {
   applyOps,
   canonicalJson,
   defaultParams,
+  effectiveParams,
   generateDesign,
   interpretCommand,
   parseBrief,
@@ -148,10 +149,8 @@ export async function handleMessage(pool: pg.Pool, user: SessionUser, projectId:
   let revision: RevisionRow | null = null;
   let reply = cmd.reply;
   if (cmd.ops.length) {
-    // Resolve engine-chosen values (e.g. stage height picked from legs) so relative changes have a base.
-    const p = structuredClone(base.params);
-    const stage = base.result.scene.objects.find((o) => o.kind === 'stage');
-    if (p.stage.heightMm === null && stage) p.stage.heightMm = stage.size.z;
+    // Resolve engine-chosen values (stage height, default lighting counts) so relative changes have a base.
+    const p = effectiveParams(base.params, base.result, cmd.ops.filter((o) => o.op === 'add').map((o) => o.path));
     const applied = applyOps(p, cmd.ops);
     if (applied.errors.length) reply = `I couldn't apply that: ${applied.errors.join('; ')}.`;
     else {

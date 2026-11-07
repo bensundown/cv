@@ -187,6 +187,14 @@ describe('equipment specs provenance', () => {
     const m = (await req('GET', `/api/models/${vx.modelId}`)).json();
     expect(m.specs.filter((s: { key: string }) => s.key === 'output_ports')).toHaveLength(1);
   });
+  it('enumerated specs (fixture_role) accept only listed values', async () => {
+    const inv = (await req('GET', '/api/inventory')).json();
+    const ball = inv.rows.find((r: { rmsId: string }) => r.rmsId === '2006');
+    const src = { kind: 'user_entry', ref: 'SYNTHETIC' };
+    expect((await req('POST', `/api/models/${ball.modelId}/specs`, { key: 'fixture_role', value: 'DISCO', status: 'PROVISIONAL', source: src })).status).toBe(422);
+    expect((await req('POST', `/api/models/${ball.modelId}/specs`, { key: 'fixture_role', value: 4, status: 'PROVISIONAL', source: src })).status).toBe(422);
+    expect((await req('POST', `/api/models/${ball.modelId}/specs`, { key: 'fixture_role', value: 'PAR', status: 'PROVISIONAL', source: src })).json().value_text).toBe('PAR');
+  });
 });
 
 let venueId = '';
@@ -244,7 +252,7 @@ describe('project workflow', () => {
     expect(r2.result.scene.objects.find((o: { kind: string }) => o.kind === 'stage').size.x).toBe(14000);
     const r1 = (await req('GET', `/api/revisions/${rev1}`)).json();
     expect(r1.result.scene.objects.find((o: { kind: string }) => o.kind === 'stage').size.x).toBe(12000);
-    const unsupported = await req('POST', `/api/projects/${projectId}/messages`, { text: 'Use fewer moving heads.' });
+    const unsupported = await req('POST', `/api/projects/${projectId}/messages`, { text: 'Change the LED to a curved concept.' });
     expect(unsupported.json()).toMatchObject({ revisionId: null, recognised: false });
   });
 

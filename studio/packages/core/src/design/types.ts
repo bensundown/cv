@@ -81,6 +81,15 @@ export interface DesignParams {
     wallClearanceMm: number;
   };
   power: { voltageV: number; circuitA: number; planningFactor: number };
+  lighting: {
+    enabled: boolean;
+    look: 'standard' | 'dramatic';
+    /** Upstage moving-light count; null = engine default from stage width and look. */
+    movingHeads: number | null;
+    /** Downstage wash count; null = engine default. */
+    stageWashes: number | null;
+    consoleItemId: string | null;
+  };
   /** Provenance for each parameter path, e.g. "stage.widthMm" → brief. */
   sources: Record<string, ParamStatus>;
 }
@@ -89,7 +98,7 @@ export type Supply = 'OWNED' | 'SHORTFALL' | 'NOT_INVENTORY';
 
 export interface SceneObject {
   id: string;
-  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone';
+  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone' | 'light_fixture';
   label: string;
   /** Footprint centre (plan mm) and base elevation z (mm above finished floor). */
   position: { x: number; y: number; z: number };
@@ -111,6 +120,8 @@ export interface Scene {
   frame: { origin: Pt; u: Pt; n: Pt; rotationDeg: number };
   objects: SceneObject[];
   ledPlan: LedPlan | null;
+  /** Optional for revisions generated before lighting existed. */
+  lightingPlan?: LightingPlan | null;
   /** Named camera viewpoints (mm). */
   viewpoints: { id: string; label: string; eye: { x: number; y: number; z: number }; target: { x: number; y: number; z: number } }[];
 }
@@ -130,12 +141,29 @@ export interface LedPlan {
   circuits: Sourced<number>;
 }
 
+export interface DmxPatchEntry {
+  fixtureId: string;
+  itemId: string;
+  product: string;
+  universe: number; // 1-based
+  address: number; // 1–512
+  footprint: number;
+}
+
+export interface LightingPlan {
+  look: 'standard' | 'dramatic';
+  patch: DmxPatchEntry[] | null; // null when any footprint is unknown
+  universes: number | null;
+  consoleItemId: string | null;
+  totalPowerW: Sourced<number>;
+}
+
 export type CheckResult = 'PASS' | 'FAIL' | 'WARN' | 'UNKNOWN' | 'HUMAN_REQUIRED';
 
 export interface Check {
   id: string;
   title: string;
-  discipline: 'venue' | 'staging' | 'led' | 'foh' | 'seating' | 'safety' | 'inventory' | 'scope';
+  discipline: 'venue' | 'staging' | 'led' | 'lighting' | 'foh' | 'seating' | 'safety' | 'inventory' | 'scope';
   severity: 'hard' | 'advisory';
   result: CheckResult;
   message: string;

@@ -14,10 +14,12 @@ Legend: ✅ done in this delivery · ◐ partly · ☐ next
 ☐ **2b:** LLM brief/revision interpreter (decision D-004) · ☐ venue research from public sources ·
 ☐ verify against your real workbook and one real verified venue plan (benchmark project B-1).
 
-## Phase 3 — Equipment intelligence (next, ~4–6 weeks)
+## Phase 3 — Equipment intelligence (started)
+✅ Lighting first pass: roles, selection, placement on deck, DMX patch, console check, power, commands (“more dramatic”, “fewer moving heads”, “8 moving heads”, “4 washes”, “add/remove lighting”), 3D beams, plan symbols, PDF patch page.
+
 - Spec enrichment workflow from manufacturer documents (upload datasheet → extract → reviewer verifies).
 - Relationship templates per family (AluStage decks/legs, Leyard cabinets/frames, Novastar outputs, QUAD 290/OV40 connectors).
-- Lighting (fixture selection, DMX universes/addresses, console capacity), audio (FBT Muse/Horizon arrays, preliminary coverage
+- Lighting next: front-light positions on stands/truss, DMX distribution schedule, fixture dimensions/weights for loads; audio (FBT Muse/Horizon arrays, preliminary coverage
   concepts, A&H console ↔ stage-box compatibility), video signal paths, truss assemblies with connector validation.
 - Cable & connection schedules, preliminary power summary per distro.
 - 3D asset library: parametric + glTF with verified bounding boxes.

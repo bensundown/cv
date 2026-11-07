@@ -9,6 +9,7 @@ export * from './equipment/specs.js';
 export * from './equipment/relationships.js';
 export * from './design/types.js';
 export * from './design/staging.js';
+export * from './design/lighting.js';
 export * from './design/led.js';
 export * from './design/generate.js';
 export * from './design/brief.js';

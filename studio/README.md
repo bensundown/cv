@@ -41,12 +41,14 @@ deployment, set `SETUP_TOKEN` first.
 5. **Projects** → new design from brief → revision 1. Revise conversationally ("make the stage 2 m
    wider", "move FOH to the back", "show me the view from the VIP tables"). Each change is a new
    immutable revision.
+   Lighting: “make the lighting more dramatic”, “use fewer moving heads”, “8 moving heads”, “add/remove lighting”.
+   Record `dmx_footprint_ch` and `max_power_w` on fixtures and `dmx_universes` on consoles to complete the checks.
 6. Export **PDF** (plan, LED elevation, render, schedule, validation), **equipment CSV**, **scene JSON**.
 
 ## Tests
 
 ```bash
-pnpm --filter @sn/core test     # 81 unit tests: geometry, calibration, import, diff, LED, staging, generator
-TEST_DATABASE_URL=postgres://sn:sn@127.0.0.1:5432/sound_ninja_test pnpm --filter @sn/server test   # 16 API tests
+pnpm --filter @sn/core test     # 100 unit tests: geometry, calibration, import, diff, LED, staging, lighting, generator
+TEST_DATABASE_URL=postgres://sn:sn@127.0.0.1:5432/sound_ninja_test pnpm --filter @sn/server test   # 17 API tests
 node e2e/smoke.mjs http://127.0.0.1:8787 ./e2e-output   # browser e2e (empty DB)
 ```

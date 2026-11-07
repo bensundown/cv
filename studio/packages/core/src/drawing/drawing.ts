@@ -87,6 +87,14 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     P.push({ t: 'poly', pts: foh.polygon, closed: true, stroke: COLORS.blue, weight: 0.4, fill: '#EAF1FF' });
     P.push({ t: 'text', at: { x: foh.position.x, y: foh.position.y }, text: 'FOH', size: 2.5, color: COLORS.blue, anchor: 'middle', bold: true, angleDeg: f.rotationDeg });
   }
+  const ROLE_ABBR: Record<string, string> = { MOVING_SPOT: 'MS', MOVING_WASH: 'MW', BEAM: 'B', WASH: 'W', PROFILE: 'P', PAR: 'PAR', STROBE: 'ST' };
+  const patchOf = new Map((scene.lightingPlan?.patch ?? []).map((e) => [e.fixtureId, e]));
+  for (const l of scene.objects.filter((x) => x.kind === 'light_fixture')) {
+    P.push({ t: 'circle', c: { x: l.position.x, y: l.position.y }, r: 250, stroke: COLORS.amber, fill: '#FFF4E8', weight: 0.3 });
+    P.push({ t: 'text', at: { x: l.position.x, y: l.position.y }, text: ROLE_ABBR[String(l.meta?.role)] ?? 'L', size: 1.3, color: COLORS.ink, anchor: 'middle', bold: true });
+    const pe = patchOf.get(l.id);
+    if (pe) P.push({ t: 'text', at: { x: l.position.x + 380, y: l.position.y }, text: `${pe.universe}.${pe.address}`, size: 1.2, color: COLORS.grey });
+  }
   for (const t of scene.objects.filter((x) => x.kind === 'table')) {
     P.push({ t: 'circle', c: { x: t.position.x, y: t.position.y }, r: t.size.x / 2, stroke: COLORS.grey, weight: 0.2 });
     P.push({ t: 'text', at: { x: t.position.x, y: t.position.y }, text: t.id.replace('table-', ''), size: 1.6, color: COLORS.grey, anchor: 'middle' });
@@ -127,6 +135,7 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     notes: [
       'All dimensions in metres. Plan coordinates in millimetres internally.',
       'Dashed outlines: geometry that is not VERIFIED. Red dashed: equipment short of confirmed stock.',
+      ...(scene.lightingPlan ? ['Lighting: MS moving spot · MW moving wash · B beam · W wash · PAR · P profile · ST strobe; label = DMX universe.address. Positions are conceptual (floor-mounted on deck).'] : []),
       ...(opts.precisionNote ? [opts.precisionNote] : []),
     ],
   };

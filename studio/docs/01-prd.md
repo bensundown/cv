@@ -67,7 +67,8 @@ Private use first; architecture ready for multi-tenant SaaS.
 - ✅ FOH placement (auto/middle/back) on stage axis; round-table seating with wall/obstruction/FOH clearances; capacity check.
 - ✅ Feasible redesign suggestions when stock or size fails.
 - ✅ Conversational revisions (supported command set); honest refusal for unsupported asks.
-- ☐ Lighting, audio, video, truss design; multi-option generation; budget optimisation; LLM interpretation.
+- ✅ Lighting (first pass): fixture roles (recorded `fixture_role` spec, else name keywords → ESTIMATED), selection from confirmed stock, floor-mounted upstage movers + downstage washes, standard/dramatic looks, DMX patch (no universe straddling), console universe check, power estimate. Counts never exceed confirmed stock.
+- ☐ Front light, overhead positions/truss, focus, colour; audio, video, truss design; multi-option generation; budget optimisation; LLM interpretation.
 
 ### 5.6 Outputs
 - ✅ Dimensioned 2D plan (SVG on screen, vector PDF at a standard scale with title block and scale bar).

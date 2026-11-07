@@ -28,6 +28,7 @@ import {
 import { type Confidence, type Source, type Sourced, weakest } from '../provenance.js';
 import { fmtM } from '../units.js';
 import { cabinetGrid, checkProcessor, dataChains, ledPower, nearestWallSizes, wallResolution } from './led.js';
+import { defaultCounts, DOWNSTAGE_ROLES, packDmx, pickFixture, UPSTAGE_ROLES, universesUsed } from './lighting.js';
 import { nearbyTileableSizes, tileStage, type DeckOption } from './staging.js';
 import type {
   Assumption,
@@ -37,6 +38,7 @@ import type {
   DesignParams,
   DesignResult,
   LedPlan,
+  LightingPlan,
   OverallStatus,
   SceneObject,
   StockItem,
@@ -57,6 +59,7 @@ export function defaultParams(): DesignParams {
     foh: { position: 'auto', widthMm: 3000, depthMm: 2000, rearClearanceMm: 1500 },
     seating: { style: 'rounds', seatsPerTable: 10, tableDiameterMm: 1800, pitchMm: 3300, frontClearanceMm: 3000, wallClearanceMm: 1000 },
     power: { voltageV: 230, circuitA: 16, planningFactor: 0.8 },
+    lighting: { enabled: false, look: 'standard', movingHeads: null, stageWashes: null, consoleItemId: null },
     sources: {
       'stage.widthMm': d(),
       'stage.depthMm': d(),
@@ -75,6 +78,29 @@ export function defaultParams(): DesignParams {
       'power.planningFactor': d(),
     },
   };
+}
+
+/** Fill parameter groups added after a revision was stored (older revisions stay valid). */
+export function normalizeParams(p: DesignParams): DesignParams {
+  const d = defaultParams();
+  return { ...d, ...p, lighting: { ...d.lighting, ...(p.lighting ?? {}) }, power: { ...d.power, ...(p.power ?? {}) }, sources: { ...(p.sources ?? {}) } };
+}
+
+/**
+ * Pin values the engine chose (stage height from legs, default lighting counts) so that relative
+ * revisions ("raise the stage 200 mm", "fewer moving heads") have an explicit base.
+ */
+export function effectiveParams(params: DesignParams, result: DesignResult, onlyPaths?: string[]): DesignParams {
+  // Pin only what a relative change needs; unpinned defaults keep scaling with later edits
+  // (e.g. a wider stage or a dramatic look still changes default fixture counts).
+  const want = (path: string) => !onlyPaths || onlyPaths.includes(path);
+  const p = normalizeParams(structuredClone(params));
+  const stage = result.scene.objects.find((o) => o.kind === 'stage');
+  if (want('stage.heightMm') && p.stage.heightMm === null && stage) p.stage.heightMm = stage.size.z;
+  const count = (g: string) => result.scene.objects.filter((o) => o.kind === 'light_fixture' && o.meta?.group === g).length;
+  if (want('lighting.movingHeads') && p.lighting.enabled && p.lighting.movingHeads === null) p.lighting.movingHeads = count('upstage');
+  if (want('lighting.stageWashes') && p.lighting.enabled && p.lighting.stageWashes === null) p.lighting.stageWashes = count('downstage');
+  return p;
 }
 
 const pStat = (p: DesignParams, key: string): Confidence => p.sources[key]?.status ?? 'ESTIMATED';
@@ -126,7 +152,8 @@ const qtyNote = (it: StockItem | undefined) =>
   !it ? '' : it.qtyConfirmed === null ? ` (owned quantity not yet confirmed — 0 allocatable; file shows ${it.qtyShown ?? 'blank'})` : ` (confirmed owned: ${it.qtyConfirmed})`;
 
 export function generateDesign(ctx: DesignContext): DesignResult {
-  const { params: P, venue: V, stock, relationships: G } = ctx;
+  const { venue: V, stock, relationships: G } = ctx;
+  const P = normalizeParams(ctx.params);
   const checks: Check[] = [];
   const assumptions: Assumption[] = [];
   const alternatives: string[] = [];
@@ -659,6 +686,146 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     }
   }
 
+
+  // ---- Lighting (floor-mounted on the stage deck; front light & truss not designed) ---------------
+  let lightingPlan: LightingPlan | null = null;
+  if (P.lighting.enabled) {
+    const L = P.lighting;
+    const defs = defaultCounts(SW, L.look);
+    const wantMovers = L.movingHeads ?? defs.movingHeads;
+    const wantWashes = L.stageWashes ?? defs.washes;
+    if (L.movingHeads === null || L.stageWashes === null) {
+      assumptions.push({ id: 'lighting.counts', text: `Lighting counts from design defaults for a ${fmtM(SW)} stage (${L.look}): ${wantMovers} upstage moving lights, ${wantWashes} downstage washes`, status: 'ESTIMATED', source: DEFAULT });
+    }
+    const ledObj = objects.find((o) => o.kind === 'led_wall');
+    const upLy = Math.min((ledObj ? upc + P.led.setbackFromStageRearMm + ledObj.size.y : upc) + 600, upc + SD / 2);
+    const downLy = stageFrontLy - 400;
+    const span = Math.max(SW - 1000, 1000);
+    const groups = [
+      { key: 'upstage', label: 'Upstage moving lights', want: wantMovers, roles: UPSTAGE_ROLES[L.look], ly: upLy },
+      { key: 'downstage', label: 'Downstage washes', want: wantWashes, roles: DOWNSTAGE_ROLES, ly: downLy },
+    ];
+    const used = new Set<string>();
+    const fixtures: { fixtureId: string; itemId: string; product: string; footprint: number | null; power: ReturnType<typeof spec> }[] = [];
+    const msgs: string[] = [];
+    const lightStatus: Confidence[] = [];
+    let missingGroup = false;
+    let reduced = false;
+    for (const g of groups) {
+      if (g.want <= 0) continue;
+      const pick = pickFixture(stock, g.roles, used);
+      if (!pick) {
+        missingGroup = true;
+        msgs.push(`${g.label}: no fixture with a matching role (${g.roles.join(' / ')}) in inventory`);
+        unresolved.push({ id: `lighting.${g.key}`, description: `${g.want} × ${g.label.toLowerCase()}`, reason: 'No inventory fixture identified for this role (record fixture_role on the equipment page)', candidates: stock.filter((s) => s.category === 'LIGHTING_FIXTURE').map((s) => s.product).slice(0, 12) });
+        continue;
+      }
+      used.add(pick.item.itemId);
+      const n = Math.min(g.want, alloc.remaining(pick.item.itemId));
+      if (n < g.want) {
+        reduced = true;
+        if (n === 0) unresolved.push({ id: `lighting.${g.key}`, description: `${g.want} × ${pick.item.product}`, reason: `No confirmed owned stock${qtyNote(pick.item)}`, candidates: [pick.item.product] });
+      }
+      if (n > 0) alloc.require(pick.item.itemId, n, `Lighting — ${g.label.toLowerCase()}`, 'ESTIMATED');
+      lightStatus.push(pick.roleStatus);
+      msgs.push(`${g.label}: ${n}${n < g.want ? ` of ${g.want} requested` : ''} × ${pick.item.product} (${pick.role}${pick.roleStatus !== 'VERIFIED' ? `, role ${pick.roleStatus}` : ''})${n < g.want ? qtyNote(pick.item) : ''}`);
+      for (let i = 0; i < n; i++) {
+        const lx = -span / 2 + (span * (i + 0.5)) / n;
+        const id = `light-${g.key}-${i + 1}`;
+        objects.push({ id, kind: 'light_fixture', label: pick.item.product, position: { ...W(lx, g.ly), z: stageH! }, rotationDeg, size: { x: 400, y: 400, z: 600 }, itemId: pick.item.itemId, supply: 'OWNED', status: 'UNKNOWN', meta: { role: pick.role, group: g.key, lx, ly: g.ly } });
+        fixtures.push({ fixtureId: id, itemId: pick.item.itemId, product: pick.item.product, footprint: spec(pick.item.specs, 'dmx_footprint_ch').value, power: spec(pick.item.specs, 'max_power_w') });
+      }
+    }
+    if (fixtures.length) assumptions.push({ id: 'lighting.geometry', text: 'Fixture bodies drawn as 0.4 × 0.4 × 0.6 m placeholders (physical dimensions not recorded)', status: 'UNKNOWN', source: DEFAULT });
+    checks.push({
+      id: 'lighting.fixtures',
+      title: 'Lighting fixtures from inventory',
+      discipline: 'lighting',
+      severity: 'hard',
+      result: missingGroup && !fixtures.length ? 'UNKNOWN' : missingGroup || reduced ? 'WARN' : 'PASS',
+      message: msgs.join(' · ') || 'No fixtures requested',
+      dataStatus: lightStatus.length ? weakest('ESTIMATED', ...lightStatus) : 'UNKNOWN',
+      inputs: [{ label: 'Counts', status: L.movingHeads === null ? 'ESTIMATED' : pStat(P, 'lighting.movingHeads') }],
+    });
+    if (reduced) alternatives.push('Lighting counts were reduced to confirmed owned stock; confirm more fixtures or accept an external hire recommendation for the difference.');
+
+    // DMX patch & console.
+    let patch: ReturnType<typeof packDmx> = null;
+    let patchError: string | null = null;
+    try {
+      patch = packDmx(fixtures);
+    } catch (e) {
+      patchError = (e as Error).message;
+    }
+    const universes = patch ? universesUsed(patch) : null;
+    const missingFp = [...new Set(fixtures.filter((f) => f.footprint === null).map((f) => f.product))];
+    checks.push({
+      id: 'lighting.dmx',
+      title: 'DMX patch',
+      discipline: 'lighting',
+      severity: 'hard',
+      result: !fixtures.length ? 'UNKNOWN' : patchError ? 'FAIL' : patch ? 'PASS' : 'UNKNOWN',
+      message: patchError ?? (patch ? `${fixtures.length} fixtures, ${patch.reduce((a, p) => a + p.footprint, 0)} channels in ${universes} universe(s); fixtures never straddle a universe` : `DMX footprint (mode) not recorded for: ${missingFp.join(', ') || '—'}`),
+      dataStatus: patch ? weakest(...fixtures.map((f) => (f.footprint !== null ? spec(stock.find((s) => s.itemId === f.itemId)!.specs, 'dmx_footprint_ch').status : 'UNKNOWN'))) : 'UNKNOWN',
+      inputs: [],
+    });
+    const consoles = stock.filter((s) => s.category === 'LIGHTING_CONSOLE' && (!L.consoleItemId || s.itemId === L.consoleItemId));
+    let consoleId: string | null = null;
+    if (!fixtures.length) {
+      /* nothing to control */
+    } else if (!consoles.length) {
+      checks.push({ id: 'lighting.console', title: 'Lighting console capacity', discipline: 'lighting', severity: 'hard', result: 'UNKNOWN', message: 'No lighting console identified in inventory', dataStatus: 'UNKNOWN', inputs: [] });
+      unresolved.push({ id: 'lighting.console', description: 'Lighting console', reason: 'No LIGHTING_CONSOLE in inventory', candidates: [] });
+    } else {
+      const evals = consoles.map((c) => ({ c, u: spec(c.specs, 'dmx_universes') })).sort((a, b) => (a.u.value ?? Infinity) - (b.u.value ?? Infinity));
+      const ok = universes !== null ? evals.find((e) => e.u.value !== null && e.u.value >= universes && alloc.remaining(e.c.itemId) >= 1) : undefined;
+      if (ok) {
+        consoleId = ok.c.itemId;
+        alloc.require(ok.c.itemId, 1, 'Lighting control', ok.u.status);
+      }
+      const unknownCap = evals.filter((e) => e.u.value === null).map((e) => e.c.product);
+      checks.push({
+        id: 'lighting.console',
+        title: 'Lighting console capacity',
+        discipline: 'lighting',
+        severity: 'hard',
+        result: ok ? 'PASS' : universes === null || unknownCap.length ? 'UNKNOWN' : 'FAIL',
+        message: ok
+          ? `${ok.c.product}: ${universes} of ${ok.u.value} universes`
+          : universes === null
+            ? 'Universe count unknown until DMX footprints are recorded'
+            : unknownCap.length
+              ? `Output universes not recorded for: ${unknownCap.join(', ')}`
+              : `No owned console with ≥ ${universes} universes (${evals.map((e) => `${e.c.product}: ${e.u.value}${qtyNote(e.c)}`).join('; ')})`,
+        dataStatus: ok ? ok.u.status : 'UNKNOWN',
+        inputs: [],
+      });
+      if (!ok) unresolved.push({ id: 'lighting.console', description: `Lighting console for ${universes ?? '?'} universe(s)`, reason: 'No owned console verified for the required universes', candidates: consoles.map((c) => c.product) });
+    }
+    if (universes) unresolved.push({ id: 'lighting.dmx-distribution', description: `DMX distribution: ${universes} universe(s) from FOH to stage`, reason: 'Cable runs, splitters/nodes and terminators are not scheduled by this version', candidates: stock.filter((s) => s.category === 'DMX_DISTRIBUTION').map((s) => s.product).slice(0, 8) });
+
+    // Power (preliminary).
+    const pwUnknown = fixtures.filter((f) => f.power.value === null);
+    const totalW = pwUnknown.length || !fixtures.length
+      ? { value: null, status: 'UNKNOWN' as Confidence, source: { kind: 'derived' as const, note: 'Fixture max power not recorded' }, unit: 'W' }
+      : { value: fixtures.reduce((a, f) => a + f.power.value!, 0), status: weakest(...fixtures.map((f) => f.power.status)), source: { kind: 'derived' as const, note: 'Σ fixture max power' }, unit: 'W' };
+    if (fixtures.length) {
+      checks.push({
+        id: 'lighting.power',
+        title: 'Lighting power estimate',
+        discipline: 'lighting',
+        severity: 'hard',
+        result: totalW.value === null ? 'UNKNOWN' : 'PASS',
+        message: totalW.value === null ? `Max power not recorded for: ${[...new Set(pwUnknown.map((f) => f.product))].join(', ')}` : `Max ${(totalW.value / 1000).toFixed(1)} kW ≈ ${(totalW.value / P.power.voltageV).toFixed(0)} A @ ${P.power.voltageV} V. Preliminary — not an electrical design.`,
+        dataStatus: totalW.status,
+        inputs: [],
+      });
+      checks.push({ id: 'lighting.positions', title: 'Lighting positions & mounting', discipline: 'lighting', severity: 'advisory', result: 'WARN', message: 'Fixtures are floor-mounted on the stage deck and must be secured. Front light, overhead positions, truss and focus are not designed by this version.', dataStatus: 'ESTIMATED', inputs: [] });
+      unresolved.push({ id: 'lighting.front-light', description: 'Front light for presenters', reason: 'Requires truss or stands — not designed by this version', candidates: [] });
+    }
+    lightingPlan = { look: L.look, patch, universes, consoleItemId: consoleId, totalPowerW: totalW };
+  }
+
   // ---- Safety & scope -------------------------------------------------------------------------
   const human = [
     ['safety.structural', 'Structural / rigging approval', 'Any suspension, ground-support stability, LED stacking and venue structural capacity must be approved by a competent rigging/structural professional.'],
@@ -667,12 +834,13 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   ] as const;
   for (const [id, title, message] of human) checks.push({ id, title, discipline: 'safety', severity: 'hard', result: 'HUMAN_REQUIRED', message, dataStatus: 'UNKNOWN', inputs: [] });
   for (const [id, title] of [
-    ['scope.lighting', 'Lighting design'],
+    ...(P.lighting.enabled ? [] : ([['scope.lighting', 'Lighting design']] as const)),
     ['scope.audio', 'Audio design'],
     ['scope.video', 'Video / camera signal path'],
     ['scope.truss', 'Truss & rigging layout'],
   ] as const) {
-    checks.push({ id, title, discipline: 'scope', severity: 'advisory', result: 'UNKNOWN', message: 'Not designed by this version of the engine (planned: Phase 3). Equipment for this discipline is not in the schedule.', dataStatus: 'UNKNOWN', inputs: [] });
+    const message = id === 'scope.lighting' ? 'Lighting is switched off for this design (say “add lighting” to include it).' : 'Not designed by this version of the engine (planned: Phase 3). Equipment for this discipline is not in the schedule.';
+    checks.push({ id, title, discipline: 'scope', severity: 'advisory', result: 'UNKNOWN', message, dataStatus: 'UNKNOWN', inputs: [] });
   }
 
   // ---- Viewpoints -------------------------------------------------------------------------------
@@ -725,6 +893,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       frame: { origin, u, n: inward, rotationDeg },
       objects,
       ledPlan,
+      lightingPlan,
       viewpoints,
     },
     bom: {

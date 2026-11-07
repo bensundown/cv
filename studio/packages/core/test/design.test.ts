@@ -124,7 +124,7 @@ describe('revision commands', () => {
     expect(r.ops).toHaveLength(0);
   });
   it('honestly declines unsupported requests', () => {
-    for (const t of ['Use fewer moving heads.', 'Change the LED to a curved concept', 'Reduce the equipment rental value by 20%.', 'Create three completely different stage designs']) {
+    for (const t of ['Change the LED to a curved concept', 'Reduce the equipment rental value by 20%.', 'Create three completely different stage designs']) {
       const r = interpretCommand(t);
       expect(r.recognised).toBe(false);
       expect(r.ops).toHaveLength(0);

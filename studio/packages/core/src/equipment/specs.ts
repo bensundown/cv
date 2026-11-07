@@ -10,6 +10,9 @@ export interface SpecKeyDef {
   label: string;
   unit: string;
   categories: EngineeringCategory[];
+  /** 'number' (default) or an enumerated text value. */
+  kind?: 'number' | 'enum';
+  options?: string[];
   /** Engine checks that cannot complete without this value. */
   requiredFor: string[];
 }
@@ -21,7 +24,7 @@ export const SPEC_KEYS: SpecKeyDef[] = [
   { key: 'pixel_pitch_mm', label: 'Pixel pitch', unit: 'mm', categories: ['LED_PANEL'], requiredFor: ['led.resolution'] },
   { key: 'pixels_w', label: 'Pixels per cabinet (width)', unit: 'px', categories: ['LED_PANEL'], requiredFor: ['led.resolution', 'led.processor'] },
   { key: 'pixels_h', label: 'Pixels per cabinet (height)', unit: 'px', categories: ['LED_PANEL'], requiredFor: ['led.resolution', 'led.processor'] },
-  { key: 'max_power_w', label: 'Maximum power per cabinet', unit: 'W', categories: ['LED_PANEL'], requiredFor: ['led.power'] },
+  { key: 'max_power_w', label: 'Maximum power draw (per unit)', unit: 'W', categories: ['LED_PANEL', 'LIGHTING_FIXTURE'], requiredFor: ['led.power', 'lighting.power'] },
   { key: 'weight_kg', label: 'Weight', unit: 'kg', categories: ['LED_PANEL', 'STAGE_DECK', 'TRUSS', 'SPEAKER_LINE_ARRAY', 'SUBWOOFER', 'LIGHTING_FIXTURE'], requiredFor: ['load.summary'] },
   { key: 'total_pixel_capacity', label: 'Total pixel capacity', unit: 'px', categories: ['LED_PROCESSOR'], requiredFor: ['led.processor'] },
   { key: 'output_ports', label: 'Ethernet output ports', unit: 'ports', categories: ['LED_PROCESSOR'], requiredFor: ['led.processor'] },
@@ -32,6 +35,9 @@ export const SPEC_KEYS: SpecKeyDef[] = [
   { key: 'deck_depth_mm', label: 'Deck depth (short side)', unit: 'mm', categories: ['STAGE_DECK'], requiredFor: ['stage.layout'] },
   { key: 'deck_thickness_mm', label: 'Deck thickness', unit: 'mm', categories: ['STAGE_DECK'], requiredFor: ['stage.height'] },
   { key: 'rated_load_kn_m2', label: 'Rated distributed load', unit: 'kN/m²', categories: ['STAGE_DECK'], requiredFor: ['stage.load'] },
+  { key: 'fixture_role', label: 'Fixture role', unit: 'role', kind: 'enum', options: ['MOVING_SPOT', 'MOVING_WASH', 'BEAM', 'WASH', 'PROFILE', 'PAR', 'STROBE'], categories: ['LIGHTING_FIXTURE'], requiredFor: ['lighting.selection'] },
+  { key: 'dmx_footprint_ch', label: 'DMX footprint (channels, in the mode used)', unit: 'ch', categories: ['LIGHTING_FIXTURE'], requiredFor: ['lighting.dmx'] },
+  { key: 'dmx_universes', label: 'DMX output universes', unit: 'universes', categories: ['LIGHTING_CONSOLE'], requiredFor: ['lighting.console'] },
   { key: 'leg_height_mm', label: 'Leg height', unit: 'mm', categories: ['STAGE_LEG'], requiredFor: ['stage.height'] },
 ];
 
@@ -46,6 +52,13 @@ export interface SpecValue {
 }
 
 export type SpecSheet = Record<string, SpecValue>;
+
+/** Enumerated/text spec value (e.g. fixture_role). UNKNOWN-status values are ignored. */
+export function specText(sheet: SpecSheet | undefined, key: string): Sourced<string> {
+  const v = sheet?.[key];
+  if (!v || typeof v.value !== 'string' || !v.value || v.status === 'UNKNOWN') return { value: null, status: 'UNKNOWN', source: { kind: 'derived', note: `Spec "${key}" not recorded` } };
+  return { value: v.value, status: v.status, source: v.source };
+}
 
 export function spec(sheet: SpecSheet | undefined, key: string): Sourced<number> {
   const v = sheet?.[key];

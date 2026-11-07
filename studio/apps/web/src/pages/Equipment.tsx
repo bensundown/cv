@@ -5,7 +5,7 @@ import { api, can } from '../api';
 import { Badge, ErrorBox, STATUS_OPTIONS } from '../components/ui';
 import { useMe } from '../main';
 
-interface Spec { id: string; key: string; value_num: number | null; unit: string; status: string; source: { kind: string; ref?: string; url?: string; note?: string }; entered_at: string; superseded_at: string | null; entered_by_email: string | null }
+interface Spec { id: string; key: string; value_text: string | null; value_num: number | null; unit: string; status: string; source: { kind: string; ref?: string; url?: string; note?: string }; entered_at: string; superseded_at: string | null; entered_by_email: string | null }
 interface Rel { id: string; type: string; from_model_id: string; from_model: string; to_model: string | null; to_category: string | null; quantity_rule: Record<string, unknown>; status: string; evidence: { ref?: string; url?: string; note?: string }[] }
 interface Model { id: string; manufacturer: string | null; model: string; category: string; category_status: string; identity_status: string; notes: string | null }
 interface Meta { specKeys: SpecKeyDef[]; categories: string[]; relationshipTypes: string[] }
@@ -33,7 +33,8 @@ export function EquipmentPage() {
   const saveSpec = async () => {
     setErr(null);
     try {
-      await api.post(`/models/${id}/specs`, { key: form.key, value: form.value === '' ? null : Number(form.value), status: form.status, source: { kind: form.kind, ...(form.ref ? { ref: form.ref } : {}), ...(form.url ? { url: form.url } : {}), ...(form.note ? { note: form.note } : {}) } });
+      const isEnum = meta?.specKeys.find((k) => k.key === form.key)?.kind === 'enum';
+      await api.post(`/models/${id}/specs`, { key: form.key, value: form.value === '' ? null : isEnum ? form.value : Number(form.value), status: form.status, source: { kind: form.kind, ...(form.ref ? { ref: form.ref } : {}), ...(form.url ? { url: form.url } : {}), ...(form.note ? { note: form.note } : {}) } });
       setForm({ ...form, value: '', ref: '', url: '', note: '' });
       await load();
     } catch (e) {
@@ -90,7 +91,7 @@ export function EquipmentPage() {
                 return (
                   <tr key={k.key}>
                     <td>{k.label}<div className="small muted mono">{k.key}</div></td>
-                    <td className="num">{s?.value_num ?? '—'} {s ? k.unit : ''}</td>
+                    <td className="num">{s?.value_num ?? s?.value_text ?? '—'} {s && k.kind !== 'enum' ? k.unit : ''}</td>
                     <td><Badge s={s?.status ?? 'UNKNOWN'} /></td>
                     <td className="small">{s ? <>{s.source.kind}{s.source.ref ? ` · ${s.source.ref}` : ''}{s.source.url && <> · <a href={s.source.url} target="_blank" rel="noreferrer noopener">link</a></>}</> : <span className="muted">needed for: {k.requiredFor.join(', ')}</span>}</td>
                   </tr>
@@ -106,7 +107,14 @@ export function EquipmentPage() {
                   <option value="">Spec…</option>
                   {meta.specKeys.map((k) => <option key={k.key} value={k.key}>{k.label} ({k.unit})</option>)}
                 </select>
-                <input type="number" placeholder="Value" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} style={{ width: 120 }} />
+                {meta.specKeys.find((k) => k.key === form.key)?.kind === 'enum' ? (
+                  <select value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })}>
+                    <option value="">Value…</option>
+                    {meta.specKeys.find((k) => k.key === form.key)!.options!.map((o) => <option key={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input type="number" placeholder="Value" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} style={{ width: 120 }} />
+                )}
                 <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   {STATUS_OPTIONS.filter((s) => s !== 'VERIFIED' || can(me, 'equipment.verify')).map((s) => <option key={s}>{s}</option>)}
                 </select>
@@ -129,7 +137,7 @@ export function EquipmentPage() {
               <tbody>
                 {d.specs.map((s) => (
                   <tr key={s.id} style={{ opacity: s.superseded_at ? 0.55 : 1 }}>
-                    <td className="mono">{s.key}</td><td className="num">{s.value_num}</td><td>{s.status}</td><td>{s.source.kind} {s.source.ref}</td><td>{s.entered_by_email ?? 'import'}</td><td>{new Date(s.entered_at).toLocaleDateString('en-ZA')}</td>
+                    <td className="mono">{s.key}</td><td className="num">{s.value_num ?? s.value_text}</td><td>{s.status}</td><td>{s.source.kind} {s.source.ref}</td><td>{s.entered_by_email ?? 'import'}</td><td>{new Date(s.entered_at).toLocaleDateString('en-ZA')}</td>
                   </tr>
                 ))}
               </tbody>

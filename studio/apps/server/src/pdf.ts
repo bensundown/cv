@@ -180,6 +180,39 @@ export async function buildPdf(result: DesignResult, meta: PdfMeta): Promise<Buf
     el.notes.forEach((n, i) => doc.text(n, (MARGIN + 6) * MM, (A3.h - MARGIN - TITLE_H - 12 + i * 3.4) * MM, { lineBreak: false }));
   }
 
+  // 2b. Lighting & DMX patch
+  const lp = result.scene.lightingPlan;
+  if (lp) {
+    doc.addPage();
+    frame(doc, 'Lighting schedule & DMX patch (preliminary)', meta, result, '—');
+    const fixtures = result.scene.objects.filter((o) => o.kind === 'light_fixture');
+    const byId = new Map((lp.patch ?? []).map((e) => [e.fixtureId, e]));
+    const lpBottom = A3.h - MARGIN - TITLE_H - 4;
+    const lpNew = () => {
+      doc.addPage();
+      frame(doc, 'DMX patch (cont.)', meta, result, '—');
+      return area.y;
+    };
+    const ly = table(
+      doc,
+      area.x,
+      area.y,
+      [{ h: 'Fixture ID', w: 40 }, { h: 'Product', w: 110 }, { h: 'Role', w: 35 }, { h: 'Position', w: 40 }, { h: 'Universe', w: 22 }, { h: 'Address', w: 22 }, { h: 'Footprint', w: 22 }],
+      fixtures.map((f) => {
+        const pe = byId.get(f.id);
+        return [f.id, f.label, String(f.meta?.role ?? ''), String(f.meta?.group ?? ''), pe ? String(pe.universe) : '?', pe ? String(pe.address) : '?', pe ? `${pe.footprint} ch` : 'unknown'];
+      }),
+      lpBottom,
+      lpNew,
+    );
+    doc.font('body').fontSize(2.4 * MM).fillColor('#333333').text(
+      `Look: ${lp.look}. Universes: ${lp.universes ?? 'unknown'}. Max power: ${lp.totalPowerW.value === null ? 'unknown' : `${(lp.totalPowerW.value / 1000).toFixed(1)} kW (${lp.totalPowerW.status})`}. Fixtures are floor-mounted on the stage deck; front light, overhead positions, truss and focus are not designed. DMX distribution cabling is not scheduled.`,
+      area.x * MM,
+      (ly + 4) * MM,
+      { width: area.w * MM },
+    );
+  }
+
   // 3. Render
   if (meta.renderPng) {
     doc.addPage();

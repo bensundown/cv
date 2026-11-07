@@ -206,6 +206,7 @@ export function ProjectWorkspace() {
             <span>Stage <b>{m(stage.size.x)} × {m(stage.size.y)} × {m(stage.size.z)}</b></span>
             {res.scene.ledPlan && <span>LED <b>{res.scene.ledPlan.cols} × {res.scene.ledPlan.rows} = {res.scene.ledPlan.cols * res.scene.ledPlan.rows} cabinets</b>{res.scene.ledPlan.resolution.value && <> · {res.scene.ledPlan.resolution.value.w} × {res.scene.ledPlan.resolution.value.h} px <Badge s={res.scene.ledPlan.resolution.status} /></>}</span>}
             <span>Tables <b>{res.scene.objects.filter((o) => o.kind === 'table').length}</b></span>
+            {res.scene.lightingPlan && <span>Lighting <b>{res.scene.objects.filter((o) => o.kind === 'light_fixture').length} fixtures</b> · {res.scene.lightingPlan.universes ?? '?'} universe(s) · {res.scene.lightingPlan.look}</span>}
             <span className="mono muted">hash {rev!.input_hash.slice(0, 10)}</span>
           </div>
         )}
@@ -266,6 +267,19 @@ export function ProjectWorkspace() {
                       ))}
                     </tbody>
                   </table>
+                  {res.scene.lightingPlan && (
+                    <>
+                      <h3 style={{ marginTop: 12 }}>DMX patch ({res.scene.lightingPlan.look})</h3>
+                      {res.scene.lightingPlan.patch ? (
+                        <table className="data small">
+                          <thead><tr><th>Fixture</th><th>Product</th><th className="num">Univ.</th><th className="num">Addr.</th><th className="num">Ch</th></tr></thead>
+                          <tbody>{res.scene.lightingPlan.patch.map((e) => <tr key={e.fixtureId}><td className="mono">{e.fixtureId.replace('light-', '')}</td><td>{e.product}</td><td className="num">{e.universe}</td><td className="num">{e.address}</td><td className="num">{e.footprint}</td></tr>)}</tbody>
+                        </table>
+                      ) : (
+                        <div className="small muted">Not patched: DMX footprints not recorded for every fixture.</div>
+                      )}
+                    </>
+                  )}
                   {res.bom.unresolved.length > 0 && <h3 style={{ marginTop: 12 }}>Unresolved (not in schedule)</h3>}
                   {res.bom.unresolved.map((u) => <div key={u.id} className="check r-UNKNOWN small"><b>{u.description}</b><div>{u.reason}</div>{u.candidates.length > 0 && <div className="muted">Candidates: {u.candidates.join(', ')}</div>}</div>)}
                   {res.bom.nonInventory.length > 0 && <h3 style={{ marginTop: 12 }}>Not Sound Ninja inventory</h3>}

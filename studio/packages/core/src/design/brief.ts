@@ -6,6 +6,7 @@
  * structures are validated and applied by deterministic code either way.
  */
 import type { Confidence, Source } from '../provenance.js';
+import { normalizeParams } from './generate.js';
 import type { DesignParams } from './types.js';
 
 const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, half: 0.5 };
@@ -59,6 +60,12 @@ export function parseBrief(text: string): BriefExtraction {
   const aest = t.match(/\b([a-z]+(?:[- ]and[- ]| & )[a-z]+)\s+aesthetic\b/i) ?? t.match(/\b(\w+(?:\s\w+)?)\s+(?:aesthetic|theme|look)\b/i);
   if (aest) ex.push({ path: 'aesthetic', value: aest[1]!, text: aest[0] });
   if (/\btheatre[- ]style\b|\bcinema seating\b/i.test(t)) ex.push({ path: 'seating.style', value: 'none', text: 'theatre style (not yet supported: seating omitted)' });
+  const lit = t.match(/\b(?:intelligent |moving |stage )?lighting\b/i);
+  if (lit && !/\bno lighting\b/i.test(t)) ex.push({ path: 'lighting.enabled', value: true, text: lit[0] });
+  const drama = t.match(/\b(dramatic|theatrical|concert[- ]style)\b/i);
+  if (drama) ex.push({ path: 'lighting.look', value: 'dramatic', text: drama[0] });
+  const movers = t.match(/(\d+)\s*(?:moving heads?|movers|moving lights?)/i);
+  if (movers) ex.push({ path: 'lighting.movingHeads', value: Number(movers[1]), text: movers[0] });
   if (/\btechnical mode\b|\bfor construction\b/i.test(t)) ex.push({ path: 'mode', value: 'technical', text: 'technical mode' });
 
   const venue = t.match(/\b(?:at|in)\s+(?:the\s+)?([A-Z][\w'&-]*(?:\s+(?:[A-Z][\w'&-]*|of|and|&))*\s+(?:Convention Centre|Center|Centre|Hotel|Hall|Arena|Theatre|Stadium|Ballroom|Venue|Estate|Dome|Expo))/);
@@ -87,7 +94,7 @@ export function getPath(obj: unknown, path: string): unknown {
 
 /** Apply extracted brief values to params, recording provenance (brief = PROVISIONAL). */
 export function applyBrief(params: DesignParams, b: BriefExtraction): DesignParams {
-  const next = structuredClone(params);
+  const next = normalizeParams(structuredClone(params));
   for (const e of b.extracted) {
     setPath(next as unknown as Record<string, unknown>, e.path, e.value);
     next.sources[e.path] = { status: 'PROVISIONAL', source: { kind: 'brief', note: `Brief: “${e.text}”` } };
@@ -107,7 +114,7 @@ export interface CommandResult {
 }
 
 const UNSUPPORTED: [RegExp, string][] = [
-  [/moving heads?|fixtures?|lighting|dramatic/i, 'Lighting design is not generated yet (planned for Phase 3), so I can’t change fixtures or looks. The stage and LED design is unchanged.'],
+  [/moving heads?|fixtures?|lighting|dramatic|beams?|wash/i, 'I can change lighting with: “add lighting”, “remove the lighting”, “make the lighting more dramatic”, “standard lighting”, “use fewer / more moving heads”, “8 moving heads”, “4 washes”. Colours, focus, front light and truss positions are not designed yet.'],
   [/curved/i, 'Curved LED layouts are not supported yet: curving needs verified curve-capable cabinets and their connecting hardware in the relationship database.'],
   [/(three|3|several|multiple) .*(designs|options|alternatives)/i, 'Generating multiple alternative designs is not implemented yet. You can branch manually by revising from an earlier revision.'],
   [/(rental|budget|cost|price).*(\d+\s*%|reduce|lower)/i, 'Budget optimisation is not implemented yet. The schedule shows indicative rental value at listed rates only.'],
@@ -149,6 +156,27 @@ export function interpretCommand(text: string): CommandResult {
       ops.push({ op: 'set', path: 'stage.heightMm', value: toMmU(toNum(m[1]!), m[2]), note });
     }
   }
+  // Lighting
+  const LN = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten)`;
+  if ((m = t.match(new RegExp(String.raw`\b(?:use |with )?${LN}?\s*(fewer|less|more)\s+(?:moving heads?|movers|moving lights?|beams?)`, 'i')))) {
+    const n = m[1] ? toNum(m[1]) : 2;
+    ops.push({ op: 'add', path: 'lighting.movingHeads', delta: /more/i.test(m[2]!) ? n : -n, note });
+    ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  } else if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:moving heads?|movers|moving lights?)`, 'i')))) {
+    ops.push({ op: 'set', path: 'lighting.movingHeads', value: toNum(m[1]!), note });
+    ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  }
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:stage )?wash(?:es|lights?)?\b`, 'i')))) {
+    ops.push({ op: 'set', path: 'lighting.stageWashes', value: toNum(m[1]!), note });
+    ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  }
+  if (/\b(more dramatic|dramatic lighting|make it dramatic|concert look)\b/i.test(t)) {
+    ops.push({ op: 'set', path: 'lighting.look', value: 'dramatic', note });
+    ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  }
+  if (/\b(less dramatic|standard lighting|softer lighting|subtle lighting)\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.look', value: 'standard', note });
+  if (/\b(remove|no|without) (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: false, note });
+  else if (/\badd (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
   if ((m = t.match(/(?:move|put|place) (?:the )?foh (?:to |at |in )?(?:the )?(back|rear|middle|centre|center|default|auto)/i))) {
     const v = m[1]!.toLowerCase();
     ops.push({ op: 'set', path: 'foh.position', value: v === 'back' || v === 'rear' ? 'back' : v === 'default' || v === 'auto' ? 'auto' : 'middle', note });
@@ -166,7 +194,7 @@ export function interpretCommand(text: string): CommandResult {
     ops,
     recognised: false,
     reply:
-      'I didn’t recognise a change I can make yet. Supported: “make the stage 2 m wider”, “stage 12 m x 6 m”, “stage height 1 m”, “LED 10 m x 3 m”, “make the LED 1 m taller”, “move FOH to the back”, “600 guests”, “remove the LED”, “put the stage on wall 2”, “technical mode”, “show me the view from the VIP tables”.',
+      'I didn’t recognise a change I can make yet. Supported: “make the stage 2 m wider”, “make the lighting more dramatic”, “use fewer moving heads”, “stage 12 m x 6 m”, “stage height 1 m”, “LED 10 m x 3 m”, “make the LED 1 m taller”, “move FOH to the back”, “600 guests”, “remove the LED”, “put the stage on wall 2”, “technical mode”, “show me the view from the VIP tables”.',
   };
 }
 
@@ -177,7 +205,7 @@ export function describeOp(o: DesignOp): string {
 
 /** Apply ops to params. `stageWall` is returned separately (it belongs to the venue binding). */
 export function applyOps(params: DesignParams, ops: DesignOp[], status: Confidence = 'PROVISIONAL'): { params: DesignParams; stageWall?: number; errors: string[] } {
-  const next = structuredClone(params);
+  const next = normalizeParams(structuredClone(params));
   const errors: string[] = [];
   let stageWall: number | undefined;
   for (const o of ops) {
@@ -195,8 +223,9 @@ export function applyOps(params: DesignParams, ops: DesignOp[], status: Confiden
         continue;
       }
       const v = base + o.delta;
-      if (v <= 0) {
-        errors.push(`${o.path} would become ${v} mm`);
+      const min = o.path.startsWith('lighting.') ? 0 : 1;
+      if (v < min) {
+        errors.push(o.path.startsWith('lighting.') ? `${o.path} cannot go below 0 (currently ${base})` : `${o.path} would become ${v} mm`);
         continue;
       }
       setPath(next as unknown as Record<string, unknown>, o.path, v);

@@ -167,6 +167,39 @@ export const Scene3D = forwardRef<Scene3DHandle, { scene: Scene; viewpoint: stri
       g.add(glow);
     }
 
+    // Lighting fixtures (positions from the scene) + display-only beam cones.
+    const fixtures = scene.objects.filter((o) => o.kind === 'light_fixture');
+    if (fixtures.length) {
+      const f = scene.frame;
+      const local = (lx: number, ly: number, z: number) => V(f.origin.x + f.u.x * lx + f.n.x * ly, f.origin.y + f.u.y * lx + f.n.y * ly, z);
+      const dramatic = scene.lightingPlan?.look === 'dramatic';
+      const bodyMat = new THREE.MeshStandardMaterial({ color: '#18181B', roughness: 0.5, metalness: 0.6 });
+      const beamColor = new THREE.Color(gold ? '#FFD9A0' : dramatic ? '#FA2158' : '#E8EEFF');
+      const beamMat = new THREE.MeshBasicMaterial({ color: beamColor, transparent: true, opacity: dramatic ? 0.13 : 0.06, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+      const down = new THREE.Vector3(0, -1, 0);
+      fixtures.forEach((o, i) => {
+        box(o, bodyMat);
+        const lx = Number(o.meta?.lx ?? 0);
+        const ly = Number(o.meta?.ly ?? 0);
+        const top = o.position.z + o.size.z;
+        const from = local(lx, ly, top);
+        const to =
+          o.meta?.group === 'upstage'
+            ? dramatic
+              ? local(lx * 2.6 + (i % 2 ? 2500 : -2500), ly + 7000, top + 11000)
+              : local(lx * 1.4, ly + 14000, top + 6500)
+            : local(lx * 0.5, ly - 2500, top + 1500);
+        const dir = to.clone().sub(from);
+        const len = Math.min(dir.length(), 18);
+        const cone = new THREE.ConeGeometry(o.meta?.group === 'upstage' ? (dramatic ? 0.35 : 0.9) : 1.4, len, 24, 1, true);
+        cone.translate(0, -len / 2, 0);
+        const beam = new THREE.Mesh(cone, beamMat);
+        beam.position.copy(from);
+        beam.quaternion.setFromUnitVectors(down, dir.normalize());
+        g.add(beam);
+      });
+    }
+
     // FOH & tables
     const foh = scene.objects.find((o) => o.kind === 'foh');
     if (foh) box(foh, new THREE.MeshStandardMaterial({ color: '#1C2440', roughness: 0.7 }));

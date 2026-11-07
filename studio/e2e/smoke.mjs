@@ -27,6 +27,10 @@ async function fixtures() {
     ['9004', 'AluStage Leg 1m', 'Staging', 300, 0, 'Day', null],
     ['9005', 'FBT Muse 210LA', 'Audio', 12, 900, 'Day', null],
     ['9006', 'Allen & Heath SQ-6', 'Audio', 0, 2500, 'Day', 'check'],
+    ['9007', 'Chauvet Rogue R2 Spot', 'Lighting', 12, 450, 'Day', null],
+    ['9008', 'Clay Paky Sharpy Beam', 'Lighting', 10, 500, 'Day', null],
+    ['9009', 'Generic LED Wash Batten', 'Lighting', 10, 150, 'Day', null],
+    ['9010', 'ChamSys MagicQ MQ80', 'Lighting Control', 1, 1200, 'Day', null],
   ])
     ws.addRow(r);
   const xlsxPath = path.join(out, 'SYNTHETIC_inventory.xlsx');
@@ -88,21 +92,29 @@ try {
     await page.getByPlaceholder(/Basis/).fill('E2E synthetic stock count');
     await page.getByText('I confirm these are quantities').click();
     await page.getByRole('button', { name: /Accept file qty as owned/ }).click();
-    await page.getByText(/5 of 6 items are confirmed/).waitFor();
+    await page.getByText(/9 of 10 items are confirmed/).waitFor();
     await page.screenshot({ path: path.join(out, '02-inventory.png'), fullPage: true });
   });
 
-  await step('record processor specs (provisional)', async () => {
-    await page.getByRole('link', { name: 'Novastar VX1000' }).click();
-    await page.getByRole('heading', { name: 'Novastar VX1000' }).waitFor();
-    for (const [key, v] of [['total_pixel_capacity', '6500000'], ['output_ports', '10'], ['pixels_per_port', '650000'], ['max_width_px', '10240'], ['max_height_px', '8192']]) {
+  const recordSpecs = async (product, pairs) => {
+    await page.getByRole('link', { name: 'Inventory' }).click();
+    await page.getByRole('link', { name: product }).click();
+    await page.getByRole('heading', { name: product }).waitFor();
+    for (const [key, v] of pairs) {
       await page.locator('select').filter({ hasText: 'Spec…' }).selectOption(key);
       await page.getByPlaceholder('Value').fill(v);
       await page.getByPlaceholder('Source reference (document, page)').fill('SYNTHETIC e2e value');
       await page.getByRole('button', { name: 'Save', exact: true }).click();
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(250);
     }
+  };
+  await step('record equipment specs (provisional, synthetic)', async () => {
+    await recordSpecs('Novastar VX1000', [['total_pixel_capacity', '6500000'], ['output_ports', '10'], ['pixels_per_port', '650000'], ['max_width_px', '10240'], ['max_height_px', '8192']]);
     await page.screenshot({ path: path.join(out, '03-equipment.png'), fullPage: true });
+    await recordSpecs('Chauvet Rogue R2 Spot', [['dmx_footprint_ch', '16'], ['max_power_w', '400']]);
+    await recordSpecs('Clay Paky Sharpy Beam', [['dmx_footprint_ch', '16'], ['max_power_w', '200']]);
+    await recordSpecs('Generic LED Wash Batten', [['dmx_footprint_ch', '8'], ['max_power_w', '150']]);
+    await recordSpecs('ChamSys MagicQ MQ80', [['dmx_universes', '4']]);
   });
 
   await step('venue: upload plan, calibrate, trace', async () => {
@@ -186,6 +198,24 @@ try {
     await page.getByRole('button', { name: 'Send' }).click();
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, '08-vip-view.png') });
+  });
+
+  await step('lighting commands', async () => {
+    await page.getByPlaceholder(/Make the stage 2 metres wider/).fill('Make the lighting more dramatic');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await page.getByText(/Revision 3 status/).waitFor();
+    await page.getByText(/16 fixtures/).first().waitFor(); // 14 m stage, dramatic: 10 beams (stock-limited from 11) + 6 washes
+    await page.getByRole('button', { name: '3D scene' }).click();
+    await page.locator('select').filter({ hasText: 'Overview' }).selectOption('overview');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: path.join(out, '09-dramatic-3d.png') });
+    await page.getByPlaceholder(/Make the stage 2 metres wider/).fill('Use fewer moving heads');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await page.getByText(/Revision 4 status/).waitFor();
+    await page.getByText(/14 fixtures/).first().waitFor();
+    await page.getByRole('button', { name: 'Equipment' }).click();
+    await page.getByText(/DMX patch \(dramatic\)/).waitFor();
+    await page.screenshot({ path: path.join(out, '10-dmx-patch.png') });
   });
 
   await step('exports', async () => {

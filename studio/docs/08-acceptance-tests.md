@@ -1,6 +1,6 @@
 # Acceptance tests
 
-Automated: `packages/core/test` (unit, 81), `apps/server/test` (API + Postgres, 16), `e2e/smoke.mjs` (browser).
+Automated: `packages/core/test` (unit, 100), `apps/server/test` (API + Postgres, 17), `e2e/smoke.mjs` (browser).
 All fixtures are synthetic.
 
 ## A. Inventory import
@@ -47,6 +47,14 @@ All fixtures are synthetic.
 | D5 | PDF is valid vector PDF; CSV includes schedule; scene JSON in mm | API, e2e |
 | D6 | Human sign-off recorded without changing overall status | API |
 | D7 | Audit events for import, confirmation, rollback, calibration, revision, export | API |
+
+## L. Lighting
+| L1 | Fixture role from recorded spec, else keyword guess marked ESTIMATED | core `lighting` |
+| L2 | DMX patch sequential, no fixture straddles a universe; unknown footprint → no patch (UNKNOWN) | core |
+| L3 | Fixture counts never exceed confirmed stock (reduced count → WARN + alternative) | core |
+| L4 | Console must have ≥ required universes; unknown capacity → UNKNOWN; insufficient → FAIL | core |
+| L5 | “More dramatic”, “fewer moving heads”, “remove the lighting” produce the expected revisions; defaults stay unpinned across unrelated edits | core, e2e |
+| L6 | Enumerated spec values validated by the API | API |
 
 ## E. Security
 | E1 | Unauthenticated → 401; missing CSRF header → 403; viewer cannot import (403) | API |

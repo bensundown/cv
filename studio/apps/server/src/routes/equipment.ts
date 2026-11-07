@@ -62,20 +62,23 @@ export async function equipmentRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.post('/models/:id/specs', async (req) => {
     const u = requirePerm(req, 'equipment.edit');
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const b = z.object({ key: z.string(), value: z.number().finite().nullable(), status: Status, source: SourceZ }).parse(req.body);
+    const b = z.object({ key: z.string(), value: z.union([z.number().finite(), z.string().max(50)]).nullable(), status: Status, source: SourceZ }).parse(req.body);
     const def = SPEC_KEY_MAP.get(b.key);
     if (!def) throw new HttpError(400, `Unknown spec key ${b.key}`);
+    const isEnum = def.kind === 'enum';
+    if (b.value !== null && isEnum !== (typeof b.value === 'string')) throw new HttpError(422, isEnum ? `${b.key} takes one of: ${def.options!.join(', ')}` : `${b.key} must be a number`);
+    if (isEnum && b.value !== null && !def.options!.includes(b.value as string)) throw new HttpError(422, `${b.key} must be one of: ${def.options!.join(', ')}`);
     if (b.status === 'VERIFIED') {
       if (!can(u, 'equipment.verify')) throw new HttpError(403, 'Only a technical reviewer or admin can mark a specification VERIFIED');
       if (!b.source.ref && !b.source.url) throw new HttpError(422, 'A VERIFIED specification needs a source reference or URL');
       if (!['manufacturer_doc', 'user_confirmation'].includes(b.source.kind)) throw new HttpError(422, 'VERIFIED specifications must come from manufacturer documentation or a recorded physical measurement');
     }
-    if (b.value !== null && b.value <= 0) throw new HttpError(422, 'Value must be positive');
+    if (typeof b.value === 'number' && b.value <= 0) throw new HttpError(422, 'Value must be positive');
     return tx(pool, async (c) => {
       const m = await one(c, 'SELECT 1 FROM product_model WHERE id=$1 AND tenant_id=$2', [id, u.tenantId]);
       if (!m) throw new HttpError(404, 'Model not found');
       await c.query('UPDATE spec_value SET superseded_at=now() WHERE product_model_id=$1 AND key=$2 AND superseded_at IS NULL', [id, b.key]);
-      const row = await one(c, 'INSERT INTO spec_value(product_model_id, key, value_num, unit, status, source, entered_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [id, b.key, b.value, def.unit, b.value === null ? 'UNKNOWN' : b.status, JSON.stringify(b.source), u.id]);
+      const row = await one(c, 'INSERT INTO spec_value(product_model_id, key, value_num, value_text, unit, status, source, entered_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, b.key, typeof b.value === 'number' ? b.value : null, typeof b.value === 'string' ? b.value : null, def.unit, b.value === null ? 'UNKNOWN' : b.status, JSON.stringify(b.source), u.id]);
       await audit(c, u, 'spec.recorded', 'product_model', id, { key: b.key, value: b.value, status: b.status, source: b.source });
       return row;
     });
