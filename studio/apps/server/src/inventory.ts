@@ -1,5 +1,7 @@
 import {
   diffInventory,
+  matchSpecLibrary,
+  SPEC_KEY_MAP,
   guessCategory,
   guessManufacturer,
   parseInventoryRows,
@@ -124,6 +126,55 @@ const HINT_SPEC: [keyof ReturnType<typeof parseNameHints>, string, string][] = [
   ['legHeightMaxMm', 'leg_height_max_mm', 'mm'],
 ];
 
+/**
+ * Apply researched library specs to one model. Replaces name-parsed hints; never overrides a value
+ * a person entered (any other source kind). Returns the number of values written.
+ */
+export async function applySpecLibraryToModel(c: Q, modelId: string, product: string): Promise<number> {
+  let n = 0;
+  for (const e of matchSpecLibrary(product)) {
+    await c.query('UPDATE product_model SET manufacturer=COALESCE(manufacturer, $2) WHERE id=$1', [modelId, e.manufacturer]);
+    for (const sp of e.specs) {
+      const cur = await one<{ id: string; source: { kind: string; ref?: string } }>(c, 'SELECT id, source FROM spec_value WHERE product_model_id=$1 AND key=$2 AND superseded_at IS NULL', [modelId, sp.key]);
+      if (cur && cur.source.kind !== 'name_parse' && !(cur.source.ref ?? '').startsWith('Spec library')) continue; // keep human-entered values
+      if (cur) await c.query('UPDATE spec_value SET superseded_at=now() WHERE id=$1', [cur.id]);
+      const def = SPEC_KEY_MAP.get(sp.key);
+      await c.query('INSERT INTO spec_value(product_model_id, key, value_num, value_text, unit, status, source) VALUES ($1,$2,$3,$4,$5,$6,$7)', [
+        modelId,
+        sp.key,
+        typeof sp.value === 'number' ? sp.value : null,
+        typeof sp.value === 'string' ? sp.value : null,
+        def?.unit ?? '',
+        sp.status,
+        JSON.stringify({ kind: 'manufacturer_doc', ref: `Spec library (${e.manufacturer} ${e.model}): ${sp.ref}`, url: sp.url, note: `${sp.note ? `${sp.note}. ` : ''}Researched 2026-11-07 — reviewer verification pending` }),
+      ]);
+      n++;
+    }
+  }
+  return n;
+}
+
+/** Apply the library to every model in the current inventory. */
+export async function applySpecLibrary(pool: pg.Pool, user: SessionUser) {
+  return tx(pool, async (c) => {
+    const rows = await many<{ id: string; product: string }>(
+      c,
+      `SELECT DISTINCT pm.id, si.product FROM inventory_snapshot_item si JOIN inventory_snapshot s ON s.id=si.snapshot_id AND s.is_current
+       JOIN inventory_item ii ON ii.id=si.item_id JOIN product_model pm ON pm.id=ii.product_model_id WHERE s.tenant_id=$1`,
+      [user.tenantId],
+    );
+    let written = 0;
+    let models = 0;
+    for (const r of rows) {
+      const n = await applySpecLibraryToModel(c, r.id, r.product);
+      written += n;
+      if (n) models++;
+    }
+    await audit(c, user, 'spec_library.applied', 'tenant', user.tenantId, { models, written });
+    return { models, written };
+  });
+}
+
 async function ensureModel(c: Q, tenantId: string, product: string, group: string | null, rmsId: string | null): Promise<string> {
   const cat = guessCategory(product, group);
   const manufacturer = guessManufacturer(product);
@@ -148,6 +199,7 @@ async function ensureModel(c: Q, tenantId: string, product: string, group: strin
       [m.id, key, v, unit, JSON.stringify({ kind: 'name_parse', ref: `Product name “${product}”`, note: `Parsed from inventory product name${hints.unitInferred ? ' (unit not stated — metres inferred)' : ''} — confirm against the item or datasheet` })],
     );
   }
+  await applySpecLibraryToModel(c, m.id, product);
   return m.id;
 }
 

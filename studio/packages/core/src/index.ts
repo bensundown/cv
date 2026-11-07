@@ -7,6 +7,7 @@ export * from './inventory/diff.js';
 export * from './inventory/taxonomy.js';
 export * from './equipment/specs.js';
 export * from './equipment/relationships.js';
+export * from './equipment/spec-library.js';
 export * from './design/types.js';
 export * from './design/staging.js';
 export * from './design/lighting.js';

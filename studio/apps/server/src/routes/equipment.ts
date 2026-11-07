@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { audit } from '../audit.js';
 import { can, HttpError, requirePerm } from '../auth.js';
 import { many, one, tx } from '../db.js';
+import { applySpecLibrary } from '../inventory.js';
 
 const Status = z.enum(['VERIFIED', 'PROVISIONAL', 'ESTIMATED', 'UNKNOWN']);
 const SourceZ = z.object({
@@ -20,6 +21,12 @@ export async function equipmentRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get('/equipment/meta', async (req) => {
     requirePerm(req, 'inventory.read');
     return { specKeys: SPEC_KEYS, categories: ENGINEERING_CATEGORIES, relationshipTypes: RELATIONSHIP_TYPES };
+  });
+
+  /** Apply researched manufacturer specs (spec library) to matching items in the current inventory. */
+  app.post('/equipment/spec-library/apply', async (req) => {
+    const u = requirePerm(req, 'equipment.edit');
+    return applySpecLibrary(pool, u);
   });
 
   app.get('/models', async (req) => {

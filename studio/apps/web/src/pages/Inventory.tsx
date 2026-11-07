@@ -152,6 +152,11 @@ export function InventoryPage() {
           <div className="eyebrow">Inventory management</div>
           <h1>Equipment inventory {data?.snapshot && <span className="muted">· snapshot v{data.snapshot.version}</span>}</h1>
         </div>
+        {can(me, 'equipment.edit') && data?.snapshot && (
+          <button className="btn" title="Fill missing specs from the researched manufacturer spec library (never overrides values you entered)" onClick={async () => { try { const r = await api.post<{ models: number; written: number }>('/equipment/spec-library/apply'); alert(`Spec library: ${r.written} value(s) on ${r.models} model(s).`); await load(); } catch (e) { setErr(e); } }}>
+            Apply spec library
+          </button>
+        )}
         {can(me, 'inventory.import') && (
           <label className="btn primary" style={{ display: 'inline-flex', alignItems: 'center', margin: 0, color: '#fff' }}>
             {busy ? 'Reading…' : 'Upload inventory file (.xlsx / .csv)'}

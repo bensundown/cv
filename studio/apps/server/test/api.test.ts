@@ -185,8 +185,22 @@ describe('equipment specs provenance', () => {
       expect(ok.status).toBe(200);
     }
     const m = (await req('GET', `/api/models/${vx.modelId}`)).json();
-    expect(m.specs.filter((s: { key: string }) => s.key === 'output_ports')).toHaveLength(1);
+    const ports = m.specs.filter((s: { key: string; superseded_at: string | null }) => s.key === 'output_ports' && !s.superseded_at);
+    expect(ports).toHaveLength(1); // one current value; older ones kept as history
+    expect(ports[0].source.ref).toBe('SYNTHETIC test value');
   });
+  it('the spec library filled the processor on import and never overrides a person’s entry', async () => {
+    const inv = (await req('GET', '/api/inventory')).json();
+    const vx = inv.rows.find((r: { rmsId: string }) => r.rmsId === '2002');
+    const m = (await req('GET', `/api/models/${vx.modelId}`)).json();
+    const lib = m.specs.filter((s: { source: { ref: string } }) => s.source.ref?.startsWith('Spec library'));
+    expect(lib.length).toBeGreaterThanOrEqual(5);
+    expect((await req('POST', '/api/equipment/spec-library/apply')).status).toBe(200);
+    const after = (await req('GET', `/api/models/${vx.modelId}`)).json();
+    const cur = after.specs.find((s: { key: string; superseded_at: string | null }) => s.key === 'output_ports' && !s.superseded_at);
+    expect(cur.source.ref).toBe('SYNTHETIC test value');
+  });
+
   it('enumerated specs (fixture_role) accept only listed values', async () => {
     const inv = (await req('GET', '/api/inventory')).json();
     const ball = inv.rows.find((r: { rmsId: string }) => r.rmsId === '2006');

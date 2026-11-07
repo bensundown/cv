@@ -11,8 +11,12 @@
    - **Packages / services** (DJ packages, "The Keynote Killer…", COC certificates, consumables) are classified as
      non-equipment and will never be allocated.
 2. **AI provider and data policy (D-004)** — may client briefs be sent to an external LLM API? Which provider/region?
-3. **Manufacturer / venue research authorisation** — may the system fetch public manufacturer datasheets and venue
-   pages automatically, or should research be human-uploaded documents only for now?
+3. ✅ **Manufacturer research authorised** (owner, 2026-11-07). Researched specs live in the spec library
+   (`packages/core/src/equipment/spec-library.ts`), applied on import and via Inventory → “Apply spec library”.
+   Direct fetch of novastar.tech / leyardeurope.eu was blocked by this environment's network allowlist; values were taken
+   from search excerpts of the cited documents and are PROVISIONAL/ESTIMATED until a reviewer checks them.
+   Still needed from you: (a) is the Leyard 2.6 mm panel the **LN2.6** (cabinet label)? (b) do those panels run from your
+   Novastar processors today (receiving card)? (c) DMX modes you actually run on the Beamz fixtures.
 
 ## Needed for technical mode
 4. Who are the technical reviewers (people allowed to mark specs/relationships VERIFIED and sign off disciplines)?
@@ -20,7 +24,8 @@
    REQUIRES · any STAGE_LEG · 4 · “Apply to every STAGE_DECK model”. Without a stated height, stages default to the highest
    height the confirmed legs fully support (0.6 m for a 12 × 6 m stage with the current file; 0.9 m needs 10 more 600–900 mm legs).
    Still open: are the 400–600 / 600–900 mm legs telescopic, and does the range include deck thickness?
-6. LED mounting: which ground-stack / flying hardware is owned for the Leyard 2.6 mm and 3.9 mm cabinets?
+6. LED mounting: how many Leyard 2.6 mm cabinets does one “LN Led Screen Hanging And Stacking Frame” carry, and which
+   feet / bracing pipes / low-profile legs go with a ground-stacked wall? (Needed for the LED mounting check.)
 7. Standard event power assumption: typical supply (e.g. 3-phase 32 A CEE / 63 A) and planning factor to use.
 8. Preferred standard viewing/clearance rules (stage-front clearance, table pitch, FOH size) — currently labelled defaults.
 
