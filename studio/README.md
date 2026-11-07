@@ -48,7 +48,7 @@ deployment, set `SETUP_TOKEN` first.
 ## Tests
 
 ```bash
-pnpm --filter @sn/core test     # 163 unit tests: geometry, calibration, import, diff, taxonomy, LED, staging, lighting, generator
+pnpm --filter @sn/core test     # 164 unit tests: geometry, calibration, import, diff, taxonomy, LED, staging, lighting, generator
 TEST_DATABASE_URL=postgres://sn:sn@127.0.0.1:5432/sound_ninja_test pnpm --filter @sn/server test   # 21 API tests
 node e2e/smoke.mjs http://127.0.0.1:8787 ./e2e-output   # browser e2e (empty DB)
 ```

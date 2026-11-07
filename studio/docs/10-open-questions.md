@@ -25,8 +25,8 @@
    REQUIRES · any STAGE_LEG · 4 · “Apply to every STAGE_DECK model”. Without a stated height, stages default to the highest
    height the confirmed legs fully support (0.6 m for a 12 × 6 m stage with the current file; 0.9 m needs 10 more 600–900 mm legs).
    Still open: are the 400–600 / 600–900 mm legs telescopic, and does the range include deck thickness?
-6. LED mounting: how many Leyard 2.6 mm cabinets does one “LN Led Screen Hanging And Stacking Frame” carry, and which
-   feet / bracing pipes / low-profile legs go with a ground-stacked wall? (Needed for the LED mounting check.)
+6. ✅ LED mounting (owner, 2026-11-07): LN hanging/stacking frames work for the Leyard 2.6 mm and 3.9 mm panels; frame
+   limits not a concern. Recorded as MOUNTS_TO, 1 frame per metre of wall width (ESTIMATED). Structural sign-off stays human.
 7. Standard event power assumption: typical supply (e.g. 3-phase 32 A CEE / 63 A) and planning factor to use.
 8. Preferred standard viewing/clearance rules (stage-front clearance, table pitch, FOH size) — currently labelled defaults.
 

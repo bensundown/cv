@@ -222,6 +222,10 @@ describe('design generation (end-to-end, synthetic)', () => {
     expect(r.bom.lines.find((l) => l.itemId === 'leg1000')!.required).toBe(72);
     expect(r.bom.lines.find((l) => l.itemId === 'gs')!.required).toBe(6);
     expect(r.validation.checks.find((c) => c.id === 'led.mounting')!.result).toBe('PASS');
+    // 1 frame per metre of width
+    const perMetre = { ...rel[1]!, quantity: { kind: 'per_n_units' as const, per: 1, qty: 1, rounding: 'ceil' as const }, constraints: { per: 'metre_width' } };
+    const r2 = generateDesign({ params: p, venue: ballroom(), stock: [...fullStock(), gs], relationships: [rel[0]!, perMetre] });
+    expect(r2.bom.lines.find((l) => l.itemId === 'gs')!.required).toBe(6); // 6 m wall
   });
 
   it('is deterministic: identical inputs give byte-identical outputs', () => {

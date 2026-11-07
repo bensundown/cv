@@ -170,9 +170,11 @@ export function matchSpecLibrary(product: string, library: LibraryEntry[] = SPEC
 /** Relationship facts applied between matching models (owner confirmations and documented pairings). */
 export interface LibraryRelationship {
   id: string;
-  type: 'CONTROLLED_BY' | 'COMPATIBLE_WITH';
+  type: 'CONTROLLED_BY' | 'COMPATIBLE_WITH' | 'MOUNTS_TO';
   from: RegExp;
   to: RegExp;
+  quantity?: { kind: 'per_n_units'; per: number; qty: number; rounding: 'ceil' } | { kind: 'none' };
+  constraints?: Record<string, unknown>;
   status: Exclude<Confidence, 'VERIFIED' | 'UNKNOWN'>;
   ref: string;
 }
@@ -185,5 +187,16 @@ export const RELATIONSHIP_LIBRARY: LibraryRelationship[] = [
     to: /\bnovastar\b.*\bvx\s?(600|1000|2000)/i,
     status: 'PROVISIONAL',
     ref: 'Owner confirmation 2026-11-07: Sound Ninja runs its Leyard 2.6 mm panels from its Novastar VX processors',
+  },
+  {
+    id: 'leyard-ln-frames',
+    type: 'MOUNTS_TO',
+    from: /leyard.*(2[.,]6|3[.,]9)\s?mm/i,
+    to: /\bln\b.*(hanging|stacking).*frame/i,
+    // 1 frame per metre of wall width — ESTIMATED; owner: frame limits are not a concern.
+    quantity: { kind: 'per_n_units', per: 1, qty: 1, rounding: 'ceil' },
+    constraints: { per: 'metre_width' },
+    status: 'ESTIMATED',
+    ref: 'Owner confirmation 2026-11-07: LN hanging/stacking frames work for the Leyard 2.6 mm and 3.9 mm panels; frame limits not a concern (quantity 1 per metre of wall width is an estimate)',
   },
 ];

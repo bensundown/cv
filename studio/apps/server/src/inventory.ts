@@ -175,8 +175,8 @@ export async function applyRelationshipLibrary(c: Q, tenantId: string, rows: { i
         const exists = await one(c, 'SELECT 1 FROM equipment_relationship WHERE from_model_id=$1 AND to_model_id=$2 AND type=$3 AND superseded_at IS NULL', [f.id, t.id, rel.type]);
         if (exists) continue;
         await c.query(
-          `INSERT INTO equipment_relationship(tenant_id, type, from_model_id, to_model_id, quantity_rule, constraints, evidence, status) VALUES ($1,$2,$3,$4,'{"kind":"none"}','{}',$5,$6)`,
-          [tenantId, rel.type, f.id, t.id, JSON.stringify([{ kind: 'user_confirmation', ref: rel.ref, note: `Relationship library: ${rel.id}` }]), rel.status],
+          `INSERT INTO equipment_relationship(tenant_id, type, from_model_id, to_model_id, quantity_rule, constraints, evidence, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [tenantId, rel.type, f.id, t.id, JSON.stringify(rel.quantity ?? { kind: 'none' }), JSON.stringify(rel.constraints ?? {}), JSON.stringify([{ kind: 'user_confirmation', ref: rel.ref, note: `Relationship library: ${rel.id}` }]), rel.status],
         );
         created++;
       }

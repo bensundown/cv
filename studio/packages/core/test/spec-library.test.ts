@@ -42,4 +42,11 @@ describe('spec library', () => {
     expect(r.from.test('Leyard – 3.9MM Outdoor LED Panel 500mm x 500mm')).toBe(false);
     for (const p of ['NOVASTAR VX1000', 'Novastar VX600', 'Novastar VX2000Pro All-in-One']) expect(r.to.test(p)).toBe(true);
   });
+  it('LN frames mount both Leyard 2.6 and 3.9 panels, 1 per metre of width (ESTIMATED)', () => {
+    const r = RELATIONSHIP_LIBRARY.find((x) => x.id === 'leyard-ln-frames')!;
+    expect(r.from.test('Leyard – 2.6MM LED Panel 500mm x 500mm')).toBe(true);
+    expect(r.from.test('Leyard – 3.9MM Outdoor LED Panel 1m x 500mm')).toBe(true);
+    expect(r.to.test('LN Led Screen Hanging And Stacking Frame')).toBe(true);
+    expect(r.status).toBe('ESTIMATED');
+  });
 });

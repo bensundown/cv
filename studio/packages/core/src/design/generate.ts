@@ -636,7 +636,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
             fail = true;
             continue;
           }
-          const units = e.constraints['per'] === 'column' ? grid.cols : grid.count;
+          const units = e.constraints['per'] === 'column' ? grid.cols : e.constraints['per'] === 'metre_width' ? Math.ceil(LW / 1000 - 1e-9) : grid.count;
           const n = requiredQuantity(e.quantity, units);
           const rr = alloc.require(target.itemId, n, 'LED mounting', e.status);
           msgs.push(`${n} × ${target.product}${rr.shortfall ? ` (short ${rr.shortfall})` : ''}`);
