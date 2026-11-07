@@ -20,6 +20,10 @@ inside the app on 127.0.0.1; nothing is exposed to the network.
   Windows SmartScreen → *More info → Run anyway*; macOS → right-click the app → *Open* (or
   `xattr -cr "/Applications/Sound Ninja Design Studio.app"`).
 - **Build it yourself:** `pnpm install && pnpm desktop:build` (builds for the current OS into `release/desktop/`).
+- **Use it on your phone (no internet):** in the desktop app, *File → Turn on phone access (same Wi-Fi)*.
+  The app restarts and shows a QR code; scan it with the phone camera while the phone is on the same Wi-Fi
+  (or the laptop is on the phone's hotspot), sign in, and use *Add to Home Screen* for an app icon. The
+  laptop must stay on with the studio open. Use only trusted networks (the link is not encrypted).
 - **Run the server without PostgreSQL:** `DB_MODE=pglite PGLITE_DIR=./data/db pnpm start`.
 
 ## Run locally (server + PostgreSQL)

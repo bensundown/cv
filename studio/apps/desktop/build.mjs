@@ -28,7 +28,7 @@ fs.rmSync(stage, { recursive: true, force: true });
 fs.mkdirSync(path.join(stage, 'server'), { recursive: true });
 
 // Third-party runtime dependencies stay external (installed below); our workspace code is bundled.
-const runtimeDeps = Object.fromEntries(Object.entries(serverPkg.dependencies).filter(([n]) => !n.startsWith('@sn/')));
+const runtimeDeps = { ...Object.fromEntries(Object.entries(serverPkg.dependencies).filter(([n]) => !n.startsWith('@sn/'))), ...(desktopPkg.dependencies ?? {}) };
 await build({
   entryPoints: [path.join(root, 'apps/server/src/embedded.ts')],
   outfile: path.join(stage, 'server/embedded.mjs'),
@@ -36,7 +36,7 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  external: Object.keys(runtimeDeps),
+  external: Object.keys(runtimeDeps).filter((n) => n !== 'qrcode'),
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
   logLevel: 'warning',
 });

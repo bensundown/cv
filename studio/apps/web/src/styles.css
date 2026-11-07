@@ -115,3 +115,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .workspace > .card { min-height: 420px; }
   .grid2 { grid-template-columns: 1fr; }
 }
+
+/* ---- Phones (≤ 700 px): single column, scrollable tables, touch-sized controls ---- */
+@media (max-width: 700px) {
+  body { font-size: 15px; }
+  .shell { grid-template-rows: auto 1fr; }
+  .topbar { flex-wrap: wrap; gap: 6px 12px; padding: 8px 12px; }
+  .topbar img { height: 18px; }
+  .topbar nav { order: 3; flex-basis: 100%; overflow-x: auto; }
+  .topbar nav a { padding: 8px 10px; font-size: 12px; white-space: nowrap; }
+  .topbar .who { margin-left: auto; gap: 8px; }
+  .topbar .who > span { display: none; }
+  .main { padding: 12px; }
+  h1 { font-size: 18px; }
+  .card { padding: 12px; }
+  .workspace { display: flex; flex-direction: column; gap: 10px; }
+  .workspace > .card { min-height: 0; overflow: visible; }
+  .ws-view { order: 1; }
+  .ws-side { order: 2; }
+  .ws-chat { order: 3; }
+  .ws-view .viewport { height: 62vh; flex: none; }
+  .ws-side .scroll, .ws-chat .scroll { max-height: 60vh; }
+  .ws-view .tabs button { padding: 10px 8px; font-size: 11px; }
+  table.data { display: block; overflow-x: auto; white-space: nowrap; }
+  table.data td { white-space: normal; min-width: 80px; }
+  input, select, textarea, .btn { min-height: 44px; font-size: 16px; } /* 16 px stops iOS zooming into fields */
+  .btn.sm { min-height: 36px; font-size: 12px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .login-card { width: 100%; }
+}

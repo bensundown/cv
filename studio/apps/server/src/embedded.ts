@@ -12,6 +12,8 @@ export interface EmbeddedOptions {
   dbDir: string;
   /** 0 = any free port. */
   port?: number;
+  /** '127.0.0.1' (default, this computer only) or '0.0.0.0' (also phones/tablets on the same Wi-Fi). */
+  host?: string;
   log?: (msg: string) => void;
 }
 
@@ -20,7 +22,7 @@ export async function startEmbedded(opts: EmbeddedOptions): Promise<{ port: numb
   const applied = await migrate(pool, (m) => opts.log?.(m));
   if (applied.length) opts.log?.(`Database ready (${applied.length} migration(s) applied)`);
   const app = await buildApp(pool, { logger: false });
-  await app.listen({ port: opts.port ?? 0, host: '127.0.0.1' });
+  await app.listen({ port: opts.port ?? 0, host: opts.host ?? '127.0.0.1' });
   const addr = app.server.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   return {
