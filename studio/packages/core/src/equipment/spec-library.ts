@@ -166,3 +166,24 @@ export const SPEC_LIBRARY: LibraryEntry[] = [
 export function matchSpecLibrary(product: string, library: LibraryEntry[] = SPEC_LIBRARY): LibraryEntry[] {
   return library.filter((e) => e.match.test(product));
 }
+
+/** Relationship facts applied between matching models (owner confirmations and documented pairings). */
+export interface LibraryRelationship {
+  id: string;
+  type: 'CONTROLLED_BY' | 'COMPATIBLE_WITH';
+  from: RegExp;
+  to: RegExp;
+  status: Exclude<Confidence, 'VERIFIED' | 'UNKNOWN'>;
+  ref: string;
+}
+
+export const RELATIONSHIP_LIBRARY: LibraryRelationship[] = [
+  {
+    id: 'leyard26-novastar',
+    type: 'CONTROLLED_BY',
+    from: /leyard.*2[.,]6\s?mm|\bln\s?2[.,]6\b/i,
+    to: /\bnovastar\b.*\bvx\s?(600|1000|2000)/i,
+    status: 'PROVISIONAL',
+    ref: 'Owner confirmation 2026-11-07: Sound Ninja runs its Leyard 2.6 mm panels from its Novastar VX processors',
+  },
+];

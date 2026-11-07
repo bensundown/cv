@@ -66,3 +66,37 @@ export function pickFamily(cands: StockItem[], familyOf: StockItem | null, limit
   const pool = same.length ? same : usable;
   return [...pool].sort((a, b) => limit(b) - limit(a) || a.product.localeCompare(b.product))[0] ?? null;
 }
+
+export interface HeadsetCompat {
+  headset: RegExp;
+  bodypack: RegExp;
+  note: string;
+  status: Confidence;
+  ref: string;
+  url: string;
+}
+
+/** Cross-brand headset ↔ bodypack pairings that work with the right connector. */
+export const HEADSET_COMPAT: HeadsetCompat[] = [
+  {
+    headset: /samson\s*se\s?(50|60)/i,
+    bodypack: /sennheiser|ew-?d|\bsk\b/i,
+    note: 'fit Samson’s Sennheiser 3.5 mm connector (SAAD300) on each Samson headset',
+    status: 'PROVISIONAL',
+    ref: 'Owner confirmation 2026-11-07; Samson SAAD300 Sennheiser 3.5 mm connector for SE50',
+    url: 'https://www.adorama.com/samson-saad300-senn-3-5-mm-connector-se50/p/saad300b',
+  },
+];
+
+/** Order headset candidates: same maker as the bodypack first, then known-compatible cross-brand models. */
+export function orderHeadsets(headsets: StockItem[], bodypack: StockItem | undefined, maker: (x: StockItem) => string | null): { item: StockItem; via: HeadsetCompat | null }[] {
+  if (!bodypack) return headsets.map((item) => ({ item, via: null }));
+  const same = headsets.filter((h) => maker(h) && maker(h) === maker(bodypack)).map((item) => ({ item, via: null }));
+  const cross = headsets
+    .filter((h) => !same.some((x) => x.item.itemId === h.itemId))
+    .flatMap((item) => {
+      const via = HEADSET_COMPAT.find((c) => c.headset.test(item.product) && c.bodypack.test(bodypack.product));
+      return via ? [{ item, via }] : [];
+    });
+  return [...same, ...cross];
+}

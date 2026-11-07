@@ -195,7 +195,11 @@ describe('equipment specs provenance', () => {
     const m = (await req('GET', `/api/models/${vx.modelId}`)).json();
     const lib = m.specs.filter((s: { source: { ref: string } }) => s.source.ref?.startsWith('Spec library'));
     expect(lib.length).toBeGreaterThanOrEqual(5);
-    expect((await req('POST', '/api/equipment/spec-library/apply')).status).toBe(200);
+    const applied = (await req('POST', '/api/equipment/spec-library/apply')).json();
+    expect(applied.relationships).toBe(0); // already created at import (Leyard 2.6 → Novastar), idempotent
+    const led = inv.rows.find((r: { rmsId: string }) => r.rmsId === '2001');
+    const lm = (await req('GET', `/api/models/${led.modelId}`)).json();
+    expect(lm.relationships.some((x: { type: string; to_model: string }) => x.type === 'CONTROLLED_BY' && /VX600/i.test(x.to_model))).toBe(true);
     const after = (await req('GET', `/api/models/${vx.modelId}`)).json();
     const cur = after.specs.find((s: { key: string; superseded_at: string | null }) => s.key === 'output_ports' && !s.superseded_at);
     expect(cur.source.ref).toBe('SYNTHETIC test value');

@@ -1,6 +1,7 @@
 import {
   diffInventory,
   matchSpecLibrary,
+  RELATIONSHIP_LIBRARY,
   SPEC_KEY_MAP,
   guessCategory,
   guessManufacturer,
@@ -162,6 +163,28 @@ export async function applySpecLibraryToModel(c: Q, modelId: string, product: st
   return n;
 }
 
+/** Create library relationships between matching models (idempotent). */
+export async function applyRelationshipLibrary(c: Q, tenantId: string, rows: { id: string; product: string }[]): Promise<number> {
+  let created = 0;
+  for (const rel of RELATIONSHIP_LIBRARY) {
+    const froms = rows.filter((r) => rel.from.test(r.product));
+    const tos = rows.filter((r) => rel.to.test(r.product));
+    for (const f of froms) {
+      for (const t of tos) {
+        if (f.id === t.id) continue;
+        const exists = await one(c, 'SELECT 1 FROM equipment_relationship WHERE from_model_id=$1 AND to_model_id=$2 AND type=$3 AND superseded_at IS NULL', [f.id, t.id, rel.type]);
+        if (exists) continue;
+        await c.query(
+          `INSERT INTO equipment_relationship(tenant_id, type, from_model_id, to_model_id, quantity_rule, constraints, evidence, status) VALUES ($1,$2,$3,$4,'{"kind":"none"}','{}',$5,$6)`,
+          [tenantId, rel.type, f.id, t.id, JSON.stringify([{ kind: 'user_confirmation', ref: rel.ref, note: `Relationship library: ${rel.id}` }]), rel.status],
+        );
+        created++;
+      }
+    }
+  }
+  return created;
+}
+
 /** Apply the library to every model in the current inventory. */
 export async function applySpecLibrary(pool: pg.Pool, user: SessionUser) {
   return tx(pool, async (c) => {
@@ -178,8 +201,9 @@ export async function applySpecLibrary(pool: pg.Pool, user: SessionUser) {
       written += n;
       if (n) models++;
     }
-    await audit(c, user, 'spec_library.applied', 'tenant', user.tenantId, { models, written });
-    return { models, written };
+    const relationships = await applyRelationshipLibrary(c, user.tenantId, rows);
+    await audit(c, user, 'spec_library.applied', 'tenant', user.tenantId, { models, written, relationships });
+    return { models, written, relationships };
   });
 }
 
@@ -272,6 +296,8 @@ export async function applyImport(pool: pg.Pool, user: SessionUser, importId: st
           kept++;
         }
       }
+      const modelRows = await many<{ id: string; product: string }>(c, `SELECT DISTINCT ii.product_model_id AS id, si.product FROM inventory_snapshot_item si JOIN inventory_item ii ON ii.id=si.item_id WHERE si.snapshot_id=$1 AND ii.product_model_id IS NOT NULL`, [snap.id]);
+      await applyRelationshipLibrary(c, user.tenantId, modelRows);
       await c.query(`UPDATE inventory_import SET status='applied', applied_snapshot_id=$2 WHERE id=$1`, [importId, snap.id]);
       await audit(c, user, 'inventory.snapshot.created', 'inventory_snapshot', snap.id, { version, importId, created, kept, retired });
       return { snapshotId: snap.id, version, created, kept, retired };

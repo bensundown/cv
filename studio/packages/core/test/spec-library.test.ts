@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchSpecLibrary, SPEC_KEY_MAP, SPEC_LIBRARY } from '../src/index.js';
+import { matchSpecLibrary, RELATIONSHIP_LIBRARY, SPEC_KEY_MAP, SPEC_LIBRARY } from '../src/index.js';
 
 describe('spec library', () => {
   const ids = (name: string) => matchSpecLibrary(name).map((e) => e.id);
@@ -35,5 +35,11 @@ describe('spec library', () => {
     expect(get('novastar-vx600', 'pixels_per_port').status).toBe('ESTIMATED');
     expect(get('novastar-vx2000pro', 'pixels_per_port').status).toBe('PROVISIONAL');
     expect(get('leyard-ln2.6', 'max_power_w').status).toBe('ESTIMATED');
+  });
+  it('Leyard 2.6 → Novastar relationship matches the right models only', () => {
+    const r = RELATIONSHIP_LIBRARY.find((x) => x.id === 'leyard26-novastar')!;
+    expect(r.from.test('Leyard – 2.6MM LED Panel 500mm x 500mm')).toBe(true);
+    expect(r.from.test('Leyard – 3.9MM Outdoor LED Panel 500mm x 500mm')).toBe(false);
+    for (const p of ['NOVASTAR VX1000', 'Novastar VX600', 'Novastar VX2000Pro All-in-One']) expect(r.to.test(p)).toBe(true);
   });
 });

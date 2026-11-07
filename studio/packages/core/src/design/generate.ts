@@ -31,7 +31,7 @@ import { cabinetGrid, checkProcessor, dataChains, ledPower, nearestWallSizes, wa
 import { describeStock, STRICT_POLICY, stockLimit, type StockPolicy } from './stock.js';
 import { nameTokens } from '../inventory/parse.js';
 import { guessManufacturer } from '../inventory/taxonomy.js';
-import { boxesForThrow, pickConsole, pickFamily, pickStageBox, subsForBoxes } from './audio.js';
+import { boxesForThrow, orderHeadsets, pickConsole, pickFamily, pickStageBox, subsForBoxes } from './audio.js';
 import { defaultCounts, DOWNSTAGE_ROLES, packDmx, pickFixture, UPSTAGE_ROLES, universesUsed } from './lighting.js';
 import { nearbyTileableSizes, tileStage, type DeckOption } from './staging.js';
 import type {
@@ -847,7 +847,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     // Headset mics must suit the bodypack: prefer the same manufacturer (e.g. Sennheiser HS with Sennheiser SK).
     const maker = (x: StockItem | undefined) => (x ? guessManufacturer(x.product) : null);
     const headsets = mics.filter((m) => /headset|head set|\bhs\b/i.test(m.product) && !/intercom/i.test(m.product));
-    const headset = headsets.find((m) => maker(m) && maker(m) === maker(bodypack)) ?? headsets[0];
+    const headsetOrder = orderHeadsets(headsets, bodypack, (x) => maker(x));
     const wmsg: string[] = [];
     let wfail = false;
     const need = (it: StockItem | undefined, n: number, purpose: string) => {
@@ -863,7 +863,23 @@ export function generateDesign(ctx: DesignContext): DesignResult {
     };
     need(handheld, A.wirelessHandheld, 'Wireless handheld');
     need(bodypack, A.wirelessHeadset, 'Wireless bodypack');
-    need(headset, A.wirelessHeadset, 'Headset mic');
+    // Headsets: same maker first, then compatible cross-brand models (e.g. Samson SE50 with a Sennheiser connector).
+    if (A.wirelessHeadset > 0) {
+      let left = A.wirelessHeadset;
+      for (const { item, via } of headsetOrder) {
+        const take = Math.min(left, alloc.remaining(item.itemId));
+        if (take <= 0) continue;
+        alloc.require(item.itemId, take, `Audio — Headset mic${via ? ' (with Sennheiser connector)' : ''}`, via ? via.status : 'ESTIMATED');
+        wmsg.push(`${take} × ${item.product}${via ? ` — ${via.note}` : ''}`);
+        if (via) unresolved.push({ id: `audio.headset-connector:${item.itemId}`, description: `${take} × connector for ${item.product}`, reason: via.note, candidates: [] });
+        left -= take;
+        if (left <= 0) break;
+      }
+      if (left > 0) {
+        wfail = true;
+        wmsg.push(`${left} headset mic(s) short — no compatible headset with stock`);
+      }
+    }
     need(receiver, A.wirelessHandheld + A.wirelessHeadset, 'Wireless receiver (1 per transmitter)');
     if (A.wirelessHandheld + A.wirelessHeadset > 0) {
       assumptions.push({ id: 'audio.wireless', text: `${A.wirelessHandheld} handheld + ${A.wirelessHeadset} headset wireless channels (design default for presentations)`, status: 'ESTIMATED', source: DEFAULT });

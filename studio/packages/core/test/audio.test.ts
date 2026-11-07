@@ -19,6 +19,7 @@ const audioStock = () => [
   s('sam', 'Samson SE50 Single Ear Headset Mic (countryman)', 'MICROPHONE', 8),
   s('hs', 'Sennheiser HS Black', 'MICROPHONE', 5),
 ];
+const STRICT_FILE = OWNER_GUIDELINE_POLICY;
 const base = () => [{ ...ledPanel(null), qtyShown: 150 }, { ...processor(null), qtyShown: 2 }, { ...deck(null), qtyShown: 40 }, { ...leg(null), qtyShown: 200 }];
 const gala = () => applyBrief(defaultParams(), parseBrief('Gala for 500 guests, 12 m x 6 m stage, 6 m x 3 m LED wall, professional sound.'));
 
@@ -58,6 +59,17 @@ describe('audio in the design', () => {
     const stage = r.scene.objects.find((o) => o.kind === 'stage')!;
     for (const m of mains) expect(Math.abs(m.position.y - stage.position.y)).toBeGreaterThan(stage.size.x / 2);
   });
+  it('Samson headsets work with Sennheiser bodypacks (with the Sennheiser connector) when Sennheiser headsets run out', () => {
+    const p = gala();
+    p.audio.wirelessHeadset = 8; // 5 Sennheiser HS in stock → 3 Samson SE50
+    const r = generateDesign({ params: p, venue: ballroom(), stock: [...base(), ...audioStock()], relationships: [], stockPolicy: STRICT_FILE });
+    const bom = Object.fromEntries(r.bom.lines.map((l) => [l.itemId, l.allocated]));
+    expect(bom.hs).toBe(6); // 5 + 20 % headroom
+    expect(bom.sam).toBe(2);
+    expect(r.validation.checks.find((x) => x.id === 'audio.wireless')!.message).toMatch(/Sennheiser 3\.5 mm connector/);
+    expect(r.bom.unresolved.some((u) => u.id.startsWith('audio.headset-connector'))).toBe(true);
+  });
+
   it('commands: boxes per side, point source, remove sound', () => {
     const p1 = applyOps(gala(), interpretCommand('4 boxes per side').ops).params;
     expect(p1.audio.boxesPerSide).toBe(4);

@@ -15,8 +15,9 @@
    (`packages/core/src/equipment/spec-library.ts`), applied on import and via Inventory → “Apply spec library”.
    Direct fetch of novastar.tech / leyardeurope.eu was blocked by this environment's network allowlist; values were taken
    from search excerpts of the cited documents and are PROVISIONAL/ESTIMATED until a reviewer checks them.
-   Still needed from you: (a) is the Leyard 2.6 mm panel the **LN2.6** (cabinet label)? (b) do those panels run from your
-   Novastar processors today (receiving card)? (c) DMX modes you actually run on the Beamz fixtures.
+   ✅ Leyard 2.6 mm panels run from the Novastar VX processors (owner, 2026-11-07) — relationship library.
+   ✅ Samson SE50/SE60 headsets are used with Sennheiser bodypacks (with Samson's Sennheiser 3.5 mm connector).
+   Still needed: (a) is the Leyard 2.6 mm panel the **LN2.6** (cabinet label)? (c) DMX modes you run on the Beamz fixtures.
 
 ## Needed for technical mode
 4. Who are the technical reviewers (people allowed to mark specs/relationships VERIFIED and sign off disciplines)?
