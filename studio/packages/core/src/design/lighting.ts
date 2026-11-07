@@ -27,8 +27,8 @@ export function fixtureRole(item: Pick<StockItem, 'product' | 'specs'>): { role:
   if (/profile|ellipsoidal|leko|source four|\bers\b/.test(p)) return guess('PROFILE');
   if (moving && /wash/.test(p)) return guess('MOVING_WASH');
   if (moving) return guess('MOVING_SPOT');
-  if (/\bwash\b|batten|led bar|pixel bar/.test(p)) return guess('WASH');
-  if (/\bpar\b|par ?\d{2}|uplight/.test(p)) return guess('PAR');
+  if (/\bwash\b|batten|led ?bar|pixel ?bar|\blcb\b|gig ?bar/.test(p)) return guess('WASH');
+  if (/\bpar\b|par ?can|parcan|par ?\d{2}|uplight|flood ?light/.test(p)) return guess('PAR');
   return guess(null);
 }
 

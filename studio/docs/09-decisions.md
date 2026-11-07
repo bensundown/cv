@@ -13,4 +13,5 @@
 | D-009 | 4 legs per deck as a labelled design default until a REQUIRES relationship is recorded | Made | Real AluStage leg sharing differs; must be replaced by verified relationships. |
 | D-010 | Rollback = new snapshot copying an old one | Made | Linear, auditable history; no destructive edits. |
 | D-011 | Traced room geometry keeps user's vertex order (CW or CCW) | Made | Wall numbers must match what the user drew; engine handles both windings. |
+| D-013 | Ordered, group-aware taxonomy rules; non-equipment categories (PACKAGE, SERVICE_OR_CONSUMABLE); STAGE_DECK_SHAPED never tiled; adjustable leg ranges | Made after the real workbook | Real names broke the first keyword rules (truss as decks, amps for 32 A cables). Categories remain ESTIMATED and user-correctable. |
 | D-012 | Native renders captured in-browser from the scene (WebGL); photoreal deferred | Made | Honest labelling; path tracing in Phase 5. |

@@ -98,6 +98,8 @@ export type IssueCode =
   | 'RATE_NOT_NUMERIC'
   | 'CHARGE_PERIOD_BLANK'
   | 'POSSIBLE_DUPLICATE_PRODUCT'
+  | 'POSSIBLE_NEAR_DUPLICATE'
+  | 'QTY_UNIT_OF_MEASURE'
   | 'DATA_FLAG_PRESENT';
 
 export interface Issue {
@@ -240,6 +242,9 @@ export function parseInventoryRows(rows: unknown[][]): ParseResult {
     const dataFlag = isBlank(df) ? null : String(df).trim();
     if (dataFlag) push('DATA_FLAG_PRESENT', 'info', `Source data flag on "${product}": ${dataFlag}`, rmsId);
 
+    if (/\bper (m2|m²|sqm|square met(er|re)|met(er|re)|m|sheet|roll)\b|\(each\)/i.test(product)) {
+      push('QTY_UNIT_OF_MEASURE', 'info', `“${product}”: quantity may be in m², metres or sheets rather than units — check before allocation`, rmsId);
+    }
     const pg = get(row, 'productGroup');
     records.push({
       rowNumber,
@@ -295,5 +300,60 @@ export function parseInventoryRows(rows: unknown[][]): ParseResult {
     }
   }
 
+  // Near-duplicates: same model token (e.g. "CQ-18T", "80kVA", "16000") and similar wording, same sizes.
+  for (const [a, b] of findNearDuplicates(records)) {
+    for (const [x, y] of [[a, b], [b, a]] as const) {
+      if (x.issues.includes('POSSIBLE_DUPLICATE_PRODUCT')) continue;
+      x.issues.push('POSSIBLE_NEAR_DUPLICATE');
+      issues.push({ code: 'POSSIBLE_NEAR_DUPLICATE', severity: 'warning', message: `“${x.product}” (row ${x.rowNumber}, ${x.productGroup ?? 'no group'}) may be the same equipment as “${y.product}” (row ${y.rowNumber}, ${y.productGroup ?? 'no group'})`, rowNumber: x.rowNumber, rmsId: x.rmsId });
+    }
+  }
+
   return { mapping, records, issues, blankRowsSkipped, blocking: issues.some((i) => i.severity === 'error') };
+}
+
+const STOP = new Set(['the', 'and', 'with', 'for', 'of', 'per', 'each', 'regular', 'price', 'x', 'a', 'in', 'on', 'or', 'to']);
+const DIM = /^\d+(\.\d+)?(mm|cm|m|mt|in|inch|ft|kg|w)$/;
+/** Tokens that look like model numbers but describe generic features. */
+const GENERIC_MODEL = new Set(['4k', '8k', '2k', '1080p', '720p', 'cat5e', 'cat6', '4in1', '3in1', '5in1', '6in1', 'ip65', 'ip44', 'rgbw', 'rgba']);
+/** Words that distinguish variants of the same product (left/right hand, colour, indoor/outdoor, size class). */
+const VARIANT_WORDS = new Set(['left', 'right', 'black', 'white', 'beige', 'grey', 'gray', 'silver', 'red', 'blue', 'yellow', 'gold', 'indoor', 'outdoor', 'small', 'medium', 'large', 'mini', 'single', 'double', 'mono', 'stereo']);
+
+export function nameTokens(name: string): { words: Set<string>; models: Set<string>; dims: Set<string> } {
+  const toks = name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/([a-z0-9])[-–]+(?=[a-z0-9])/g, '$1')
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .split(' ')
+    .map((t) => t.replace(/^\.+|\.+$/g, ''))
+    .filter((t) => t && !STOP.has(t));
+  const dims = new Set(toks.filter((t) => DIM.test(t)));
+  const words = new Set(toks.filter((t) => !DIM.test(t)));
+  const models = new Set([...words].filter((t) => !GENERIC_MODEL.has(t) && ((/\d/.test(t) && /[a-z]/.test(t)) || /^\d{3,}$/.test(t))));
+  return { words, models, dims };
+}
+
+/** Pairs of records that are probably the same equipment under different names. Review hints only. */
+export function findNearDuplicates<T extends { product: string }>(recs: T[]): [T, T][] {
+  const tok = recs.map((r) => ({ r, t: nameTokens(r.product) }));
+  const out: [T, T][] = [];
+  for (let i = 0; i < tok.length; i++) {
+    for (let j = i + 1; j < tok.length; j++) {
+      const A = tok[i]!;
+      const B = tok[j]!;
+      if (normaliseProductName(A.r.product) === normaliseProductName(B.r.product)) continue; // exact-name case handled elsewhere
+      if (![...A.t.models].some((x) => B.t.models.has(x))) continue;
+      const sameDims = A.t.dims.size === B.t.dims.size && [...A.t.dims].every((d) => B.t.dims.has(d));
+      if ((A.t.dims.size || B.t.dims.size) && !sameDims) continue; // different sizes → different items
+      const va = [...A.t.words].filter((w) => VARIANT_WORDS.has(w)).sort().join();
+      const vb = [...B.t.words].filter((w) => VARIANT_WORDS.has(w)).sort().join();
+      if (va !== vb) continue; // explicit variants (left/right, colour, indoor/outdoor) are different items
+      const inter = [...A.t.words].filter((w) => B.t.words.has(w)).length;
+      const union = new Set([...A.t.words, ...B.t.words]).size;
+      const contained = inter === Math.min(A.t.words.size, B.t.words.size); // one name fully inside the other
+      if (union && (contained || inter / union > 0.4)) out.push([A.r, B.r]);
+    }
+  }
+  return out;
 }

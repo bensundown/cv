@@ -120,6 +120,8 @@ const HINT_SPEC: [keyof ReturnType<typeof parseNameHints>, string, string][] = [
   ['deckWidthMm', 'deck_width_mm', 'mm'],
   ['deckDepthMm', 'deck_depth_mm', 'mm'],
   ['legHeightMm', 'leg_height_mm', 'mm'],
+  ['legHeightMinMm', 'leg_height_min_mm', 'mm'],
+  ['legHeightMaxMm', 'leg_height_max_mm', 'mm'],
 ];
 
 async function ensureModel(c: Q, tenantId: string, product: string, group: string | null, rmsId: string | null): Promise<string> {
@@ -143,7 +145,7 @@ async function ensureModel(c: Q, tenantId: string, product: string, group: strin
     await c.query(
       `INSERT INTO spec_value(product_model_id, key, value_num, unit, status, source)
        SELECT $1,$2,$3,$4,'ESTIMATED',$5 WHERE NOT EXISTS (SELECT 1 FROM spec_value WHERE product_model_id=$1 AND key=$2 AND superseded_at IS NULL)`,
-      [m.id, key, v, unit, JSON.stringify({ kind: 'name_parse', ref: `Product name “${product}”`, note: 'Parsed from inventory product name — confirm against the item or datasheet' })],
+      [m.id, key, v, unit, JSON.stringify({ kind: 'name_parse', ref: `Product name “${product}”`, note: `Parsed from inventory product name${hints.unitInferred ? ' (unit not stated — metres inferred)' : ''} — confirm against the item or datasheet` })],
     );
   }
   return m.id;

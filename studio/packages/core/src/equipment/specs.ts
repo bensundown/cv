@@ -38,6 +38,8 @@ export const SPEC_KEYS: SpecKeyDef[] = [
   { key: 'fixture_role', label: 'Fixture role', unit: 'role', kind: 'enum', options: ['MOVING_SPOT', 'MOVING_WASH', 'BEAM', 'WASH', 'PROFILE', 'PAR', 'STROBE'], categories: ['LIGHTING_FIXTURE'], requiredFor: ['lighting.selection'] },
   { key: 'dmx_footprint_ch', label: 'DMX footprint (channels, in the mode used)', unit: 'ch', categories: ['LIGHTING_FIXTURE'], requiredFor: ['lighting.dmx'] },
   { key: 'dmx_universes', label: 'DMX output universes', unit: 'universes', categories: ['LIGHTING_CONSOLE'], requiredFor: ['lighting.console'] },
+  { key: 'leg_height_min_mm', label: 'Adjustable leg — minimum height', unit: 'mm', categories: ['STAGE_LEG'], requiredFor: ['stage.height'] },
+  { key: 'leg_height_max_mm', label: 'Adjustable leg — maximum height', unit: 'mm', categories: ['STAGE_LEG'], requiredFor: ['stage.height'] },
   { key: 'leg_height_mm', label: 'Leg height', unit: 'mm', categories: ['STAGE_LEG'], requiredFor: ['stage.height'] },
 ];
 

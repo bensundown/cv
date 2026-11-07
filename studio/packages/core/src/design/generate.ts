@@ -238,17 +238,28 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   });
 
   // Leg / height selection.
+  // Legs are fixed-height (leg_height_mm) or adjustable (leg_height_min_mm … leg_height_max_mm).
   const legCands = stock
     .filter((s) => s.category === 'STAGE_LEG')
-    .map((s) => ({ s, h: spec(s.specs, 'leg_height_mm') }))
-    .filter((x) => x.h.value !== null);
+    .map((s) => {
+      const fixed = spec(s.specs, 'leg_height_mm');
+      const lo = spec(s.specs, 'leg_height_min_mm');
+      const hi = spec(s.specs, 'leg_height_max_mm');
+      if (lo.value !== null && hi.value !== null && hi.value >= lo.value) return { s, min: lo.value, max: hi.value, status: weakest(lo.status, hi.status) };
+      if (fixed.value !== null) return { s, min: fixed.value, max: fixed.value, status: fixed.status };
+      return null;
+    })
+    .filter((x): x is { s: StockItem; min: number; max: number; status: Confidence } => x !== null);
+  const covers = (l: { min: number; max: number }, h: number) => h >= l.min - 1 && h <= l.max + 1;
+  const legLabel = (l: { min: number; max: number }) => (l.min === l.max ? fmtM(l.min) : `${fmtM(l.min)}–${fmtM(l.max)}`);
   let stageH = P.stage.heightMm;
   let stageHStatus: Confidence = stageH !== null ? pStat(P, 'stage.heightMm') : 'ESTIMATED';
   if (stageH === null) {
     if (legCands.length) {
-      const best = [...legCands].sort((a, b) => Math.abs(a.h.value! - 1000) - Math.abs(b.h.value! - 1000))[0]!;
-      stageH = best.h.value!;
-      stageHStatus = weakest('ESTIMATED', best.h.status);
+      const near = (l: { min: number; max: number }) => Math.min(Math.max(1000, l.min), l.max);
+      const best = [...legCands].sort((a, b) => Math.abs(near(a) - 1000) - Math.abs(near(b) - 1000) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0))[0]!;
+      stageH = near(best);
+      stageHStatus = weakest('ESTIMATED', best.status);
       assumptions.push({ id: 'stage.height', text: `Stage height ${fmtM(stageH)} chosen from available leg heights (closest to 1.0 m)`, status: stageHStatus, source: DEFAULT });
     } else {
       stageH = 1000;
@@ -338,13 +349,15 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       let cands = legCands;
       if (edge && (edge.to.modelId || edge.to.oneOf)) cands = legCands.filter((l) => l.s.modelId && (edge.to.modelId === l.s.modelId || edge.to.oneOf?.includes(l.s.modelId)));
       const deckT = spec(deck.specs, 'deck_thickness_mm').value;
-      const match = cands.find((l) => Math.abs(l.h.value! - stageH!) <= 1 || (deckT !== null && Math.abs(l.h.value! + deckT - stageH!) <= 1));
+      const fits = cands.filter((l) => covers(l, stageH!) || (deckT !== null && covers(l, stageH! - deckT)));
+      // Prefer fixed-height legs, then the leg with most confirmed stock.
+      const match = [...fits].sort((a, b) => (a.max - a.min) - (b.max - b.min) || (b.s.qtyConfirmed ?? 0) - (a.s.qtyConfirmed ?? 0))[0];
       const qtyRule = edge?.quantity ?? { kind: 'per_unit' as const, ratio: 4 };
       if (!edge) {
         assumptions.push({ id: `legs:${deckId}`, text: `${deck.product}: 4 legs per deck assumed (no REQUIRES relationship recorded)`, status: 'ESTIMATED', source: DEFAULT });
       }
       if (!match) {
-        legIssues.push(`No leg of height ${fmtM(stageH)} recorded for ${deck.product} (available: ${cands.map((c) => fmtM(c.h.value!)).join(', ') || 'none'})`);
+        legIssues.push(`No leg of height ${fmtM(stageH)} recorded for ${deck.product} (available: ${cands.map(legLabel).join(', ') || 'none'})`);
         unresolved.push({ id: `legs:${deckId}`, description: `Stage legs ${fmtM(stageH)} for ${nDecks} × ${deck.product}`, reason: 'No matching leg height with recorded spec', candidates: cands.map((c) => c.s.product) });
         legStatuses.push('UNKNOWN');
         continue;
@@ -352,8 +365,8 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       const n = requiredQuantity(qtyRule, nDecks);
       const basis = edge ? edge.status : 'ESTIMATED';
       const r = alloc.require(match.s.itemId, n, `Stage legs for ${deck.product}`, basis);
-      legStatuses.push(weakest(basis, match.h.status));
-      if (r.shortfall) legIssues.push(`Short ${r.shortfall} × ${match.s.product}${qtyNote(match.s)}`);
+      legStatuses.push(weakest(basis, match.status));
+      if (r.shortfall) legIssues.push(`Short ${r.shortfall} × ${match.s.product}${qtyNote(match.s)}${edge ? '' : ' — based on the ASSUMED 4 legs per deck; record the real leg rule (REQUIRES relationship) for this deck'}`);
     }
     const legUnknown = legStatuses.includes('UNKNOWN');
     checks.push({
