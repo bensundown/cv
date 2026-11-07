@@ -1,0 +1,16 @@
+{
+  "name": "sound-ninja-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sound Ninja AI Design Studio — event production design and visualisation",
+  "packageManager": "pnpm@10.18.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @sn/server db:migrate",
+    "start": "pnpm --filter @sn/server start"
+  }
+}
