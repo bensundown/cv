@@ -95,6 +95,21 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     const pe = patchOf.get(l.id);
     if (pe) P.push({ t: 'text', at: { x: l.position.x + 380, y: l.position.y }, text: `${pe.universe}.${pe.address}`, size: 1.2, color: COLORS.grey });
   }
+  // Loudspeaker stacks (one footprint per side; label = box counts).
+  const sp = scene.objects.filter((x) => x.kind === 'speaker');
+  for (const side of [-1, 1]) {
+    const stack = sp.filter((x) => x.meta?.side === side);
+    if (!stack.length) continue;
+    const big = stack.reduce((a, b) => (a.size.x * a.size.y >= b.size.x * b.size.y ? a : b));
+    P.push({ t: 'poly', pts: rectPolygon({ x: big.position.x, y: big.position.y }, big.size.x, big.size.y, big.rotationDeg), closed: true, stroke: COLORS.ink, fill: '#2B2B30', weight: 0.3 });
+    const tops = stack.filter((x) => x.meta?.role !== 'sub').length;
+    const subs = stack.length - tops;
+    P.push({ t: 'text', at: { x: big.position.x, y: big.position.y }, text: `${side < 0 ? 'L' : 'R'} ${tops}${subs ? `+${subs}S` : ''}`, size: 1.4, color: '#FFFFFF', anchor: 'middle', bold: true, angleDeg: f.rotationDeg });
+  }
+  for (const d of scene.objects.filter((x) => x.kind === 'audio_device')) {
+    P.push({ t: 'poly', pts: rectPolygon({ x: d.position.x, y: d.position.y }, d.size.x, d.size.y, d.rotationDeg), closed: true, stroke: COLORS.ink, fill: '#D6D6D6', weight: 0.2 });
+    P.push({ t: 'text', at: { x: d.position.x, y: d.position.y + 450 }, text: 'SB', size: 1.2, color: COLORS.ink, anchor: 'middle' });
+  }
   for (const t of scene.objects.filter((x) => x.kind === 'table')) {
     P.push({ t: 'circle', c: { x: t.position.x, y: t.position.y }, r: t.size.x / 2, stroke: COLORS.grey, weight: 0.2 });
     P.push({ t: 'text', at: { x: t.position.x, y: t.position.y }, text: t.id.replace('table-', ''), size: 1.6, color: COLORS.grey, anchor: 'middle' });
@@ -135,6 +150,7 @@ export function planDrawing(scene: Scene, opts: { precisionNote?: string } = {})
     notes: [
       'All dimensions in metres. Plan coordinates in millimetres internally.',
       'Dashed outlines: geometry that is not VERIFIED. Red dashed: equipment short of confirmed stock.',
+      ...(scene.objects.some((o) => o.kind === 'speaker') ? ['Audio: L/R = PA stacks (tops + S subs), ground-stacked; SB = stage box. Concept only — coverage not modelled.'] : []),
       ...(scene.lightingPlan ? ['Lighting: MS moving spot · MW moving wash · B beam · W wash · PAR · P profile · ST strobe; label = DMX universe.address. Positions are conceptual (floor-mounted on deck).'] : []),
       ...(opts.precisionNote ? [opts.precisionNote] : []),
     ],

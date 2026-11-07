@@ -12,6 +12,7 @@ export * from './design/types.js';
 export * from './design/staging.js';
 export * from './design/lighting.js';
 export * from './design/stock.js';
+export * from './design/audio.js';
 export * from './design/led.js';
 export * from './design/generate.js';
 export * from './design/brief.js';

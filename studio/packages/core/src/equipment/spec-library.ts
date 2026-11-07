@@ -147,6 +147,20 @@ export const SPEC_LIBRARY: LibraryEntry[] = [
     model: 'T3',
     specs: [{ key: 'dmx_universes', value: 16, status: 'ESTIMATED', ref: 'Retailer listings (Avolites T3: 4 physical DMX outputs, 16 universes Art-Net/sACN)', url: 'https://www.simplysoundandlighting.co.uk/products/avolites-t3-portable-lighting-controller-16-universe-including-carry-case', note: 'Base 16 universes from the host PC (hardware dependent); 32/64 with Titan Net processors' }],
   },
+  {
+    id: 'fbt-muse210la',
+    match: /^(?!.*\b(bar|stak\w*|stack\w*|fly\w*|flying|trolley|cover)\b).*\bmuse\s?210\s?la\b/i,
+    manufacturer: 'FBT',
+    model: 'MUSE 210LA',
+    specs: [{ key: 'weight_kg', value: 38.2, status: 'PROVISIONAL', ref: 'FBT MUSE 210 LA product page (net weight 38.2 kg)', url: 'https://www.fbt.it/?p=22728' }],
+  },
+  {
+    id: 'fbt-muse218sa',
+    match: /\bmuse\s?218\s?sa\b/i,
+    manufacturer: 'FBT',
+    model: 'MUSE 218SA',
+    specs: [{ key: 'weight_kg', value: 99, status: 'PROVISIONAL', ref: 'FBT MUSE 218 SA product page (net weight 99 kg)', url: 'https://www.fbt.it/?p=22321', note: 'Designed for ground stacking with MUSE 210LA via the MS-F 210 bar' }],
+  },
 ];
 
 export function matchSpecLibrary(product: string, library: LibraryEntry[] = SPEC_LIBRARY): LibraryEntry[] {

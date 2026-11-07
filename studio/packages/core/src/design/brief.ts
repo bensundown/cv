@@ -60,6 +60,8 @@ export function parseBrief(text: string): BriefExtraction {
   const aest = t.match(/\b([a-z]+(?:[- ]and[- ]| & )[a-z]+)\s+aesthetic\b/i) ?? t.match(/\b(\w+(?:\s\w+)?)\s+(?:aesthetic|theme|look)\b/i);
   if (aest) ex.push({ path: 'aesthetic', value: aest[1]!, text: aest[0] });
   if (/\btheatre[- ]style\b|\bcinema seating\b/i.test(t)) ex.push({ path: 'seating.style', value: 'none', text: 'theatre style (not yet supported: seating omitted)' });
+  const snd = t.match(/\b(?:professional |live )?(?:sound|audio|pa system|\bpa\b)\b/i);
+  if (snd && !/\bno (sound|audio|pa)\b/i.test(t)) ex.push({ path: 'audio.enabled', value: true, text: snd[0] });
   const lit = t.match(/\b(?:intelligent |moving |stage )?lighting\b/i);
   if (lit && !/\bno lighting\b/i.test(t)) ex.push({ path: 'lighting.enabled', value: true, text: lit[0] });
   const drama = t.match(/\b(dramatic|theatrical|concert[- ]style)\b/i);
@@ -118,7 +120,7 @@ const UNSUPPORTED: [RegExp, string][] = [
   [/curved/i, 'Curved LED layouts are not supported yet: curving needs verified curve-capable cabinets and their connecting hardware in the relationship database.'],
   [/(three|3|several|multiple) .*(designs|options|alternatives)/i, 'Generating multiple alternative designs is not implemented yet. You can branch manually by revising from an earlier revision.'],
   [/(rental|budget|cost|price).*(\d+\s*%|reduce|lower)/i, 'Budget optimisation is not implemented yet. The schedule shows indicative rental value at listed rates only.'],
-  [/speaker|sub|audio|sound|pa\b/i, 'Audio design is not generated yet (planned for Phase 3).'],
+  [/speaker|sub|audio|sound|pa\b|boxes|line ?array|mic/i, 'I can change audio with: “add sound”, “remove the sound”, “4 boxes per side”, “2 subs per side”, “use point source speakers”, “use line arrays”, “4 handheld mics”. Coverage and SPL are not modelled.'],
 ];
 
 export function interpretCommand(text: string): CommandResult {
@@ -177,6 +179,19 @@ export function interpretCommand(text: string): CommandResult {
   if (/\b(less dramatic|standard lighting|softer lighting|subtle lighting)\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.look', value: 'standard', note });
   if (/\b(remove|no|without) (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: false, note });
   else if (/\badd (the )?lighting\b/i.test(t)) ops.push({ op: 'set', path: 'lighting.enabled', value: true, note });
+  // Audio
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:line ?array )?(?:boxes|cabinets|tops) (?:a |per )side`, 'i')))) {
+    ops.push({ op: 'set', path: 'audio.boxesPerSide', value: toNum(m[1]!), note }, { op: 'set', path: 'audio.enabled', value: true, note });
+  }
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*subs? (?:a |per )side`, 'i')))) {
+    ops.push({ op: 'set', path: 'audio.subsPerSide', value: toNum(m[1]!), note }, { op: 'set', path: 'audio.enabled', value: true, note });
+  }
+  if (/\b(use )?point[- ]source\b/i.test(t)) ops.push({ op: 'set', path: 'audio.system', value: 'point_source', note }, { op: 'set', path: 'audio.enabled', value: true, note });
+  else if (/\buse (the )?line ?arrays?\b/i.test(t)) ops.push({ op: 'set', path: 'audio.system', value: 'line_array', note }, { op: 'set', path: 'audio.enabled', value: true, note });
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:wireless )?handheld(?: mics?)?`, 'i')))) ops.push({ op: 'set', path: 'audio.wirelessHandheld', value: toNum(m[1]!), note });
+  if ((m = t.match(new RegExp(String.raw`\b${LN}\s*(?:wireless )?(?:headset|lapel)s?(?: mics?)?`, 'i')))) ops.push({ op: 'set', path: 'audio.wirelessHeadset', value: toNum(m[1]!), note });
+  if (/\b(remove|no|without) (the )?(sound|audio|pa)\b/i.test(t)) ops.push({ op: 'set', path: 'audio.enabled', value: false, note });
+  else if (/\badd (the )?(sound|audio|pa)\b/i.test(t)) ops.push({ op: 'set', path: 'audio.enabled', value: true, note });
   if ((m = t.match(/(?:move|put|place) (?:the )?foh (?:to |at |in )?(?:the )?(back|rear|middle|centre|center|default|auto)/i))) {
     const v = m[1]!.toLowerCase();
     ops.push({ op: 'set', path: 'foh.position', value: v === 'back' || v === 'rear' ? 'back' : v === 'default' || v === 'auto' ? 'auto' : 'middle', note });

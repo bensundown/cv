@@ -90,6 +90,16 @@ export interface DesignParams {
     stageWashes: number | null;
     consoleItemId: string | null;
   };
+  audio: {
+    enabled: boolean;
+    system: 'auto' | 'line_array' | 'point_source';
+    /** Main boxes per side; null = rule of thumb from throw distance. */
+    boxesPerSide: number | null;
+    subsPerSide: number | null;
+    wirelessHandheld: number;
+    wirelessHeadset: number;
+    consoleItemId: string | null;
+  };
   /** Provenance for each parameter path, e.g. "stage.widthMm" → brief. */
   sources: Record<string, ParamStatus>;
 }
@@ -98,7 +108,7 @@ export type Supply = 'OWNED' | 'SHORTFALL' | 'NOT_INVENTORY';
 
 export interface SceneObject {
   id: string;
-  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone' | 'light_fixture';
+  kind: 'room' | 'obstacle' | 'stage' | 'stage_deck' | 'led_wall' | 'led_cabinet' | 'foh' | 'table' | 'zone' | 'light_fixture' | 'speaker' | 'audio_device';
   label: string;
   /** Footprint centre (plan mm) and base elevation z (mm above finished floor). */
   position: { x: number; y: number; z: number };
@@ -163,7 +173,7 @@ export type CheckResult = 'PASS' | 'FAIL' | 'WARN' | 'UNKNOWN' | 'HUMAN_REQUIRED
 export interface Check {
   id: string;
   title: string;
-  discipline: 'venue' | 'staging' | 'led' | 'lighting' | 'foh' | 'seating' | 'safety' | 'inventory' | 'scope';
+  discipline: 'venue' | 'staging' | 'led' | 'lighting' | 'audio' | 'foh' | 'seating' | 'safety' | 'inventory' | 'scope';
   severity: 'hard' | 'advisory';
   result: CheckResult;
   message: string;

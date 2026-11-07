@@ -56,6 +56,14 @@ All fixtures are synthetic.
 | L5 | “More dramatic”, “fewer moving heads”, “remove the lighting” produce the expected revisions; defaults stay unpinned across unrelated edits | core, e2e |
 | L6 | Enumerated spec values validated by the API | API |
 
+## A2. Audio
+| AU1 | Box count from throw (2–6/side), subs per 2 boxes, labelled ESTIMATED | core `audio` |
+| AU2 | Subs from the same family as the mains; stacking bar matched by model token | core |
+| AU3 | SQ → DX168 (SLink); CQ-18T → no stage box | core |
+| AU4 | Wireless: receivers = transmitters; headsets from the bodypack's manufacturer | core |
+| AU5 | Never exceeds the stock limit; shortfall FAILs the PA check | core |
+| AU6 | Coverage & SPL always WARN “not modelled” | core |
+
 ## E. Security
 | E1 | Unauthenticated → 401; missing CSRF header → 403; viewer cannot import (403) | API |
 | E2 | Setup only once; cookies HttpOnly + SameSite=Strict | API |

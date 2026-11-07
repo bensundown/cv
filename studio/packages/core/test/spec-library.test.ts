@@ -13,6 +13,8 @@ describe('spec library', () => {
     expect(ids('Beamz 75B Moving Head')).toEqual(['beamz-fuze75b']);
     expect(ids('Beamz 2812 Fuze Wash')).toEqual(['beamz-fuze2812']);
     expect(ids('Beamz LCB-14')).toEqual(['beamz-lcb14']);
+    expect(ids('FBT MUSE210LA 2X10" + 2X1" ACTIVE LINE ARRAY')).toEqual(['fbt-muse210la']);
+    expect(ids('FBT MS-F210 Flying Bar or Stakking for Muse 210LA')).toEqual([]);
     expect(ids('Beamz LCB14C')).toEqual([]);
     expect(ids('Chamsys MagicQ (MQ50) [ Lighting Console ]')).toEqual(['chamsys-mq50']);
     expect(ids('Chamsys Quick Q-20')).toEqual(['chamsys-quickq20']);

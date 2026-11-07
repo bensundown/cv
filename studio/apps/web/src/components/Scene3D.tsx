@@ -200,6 +200,10 @@ export const Scene3D = forwardRef<Scene3DHandle, { scene: Scene; viewpoint: stri
       });
     }
 
+    // Loudspeakers & stage box (physical boxes are placeholders where dimensions are unknown).
+    const cabMatA = new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.8 });
+    for (const o of scene.objects.filter((x) => x.kind === 'speaker' || x.kind === 'audio_device')) box(o, cabMatA, 10);
+
     // FOH & tables
     const foh = scene.objects.find((o) => o.kind === 'foh');
     if (foh) box(foh, new THREE.MeshStandardMaterial({ color: '#1C2440', roughness: 0.7 }));

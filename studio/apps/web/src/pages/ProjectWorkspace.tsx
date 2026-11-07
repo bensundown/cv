@@ -206,6 +206,7 @@ export function ProjectWorkspace() {
             <span>Stage <b>{m(stage.size.x)} × {m(stage.size.y)} × {m(stage.size.z)}</b></span>
             {res.scene.ledPlan && <span>LED <b>{res.scene.ledPlan.cols} × {res.scene.ledPlan.rows} = {res.scene.ledPlan.cols * res.scene.ledPlan.rows} cabinets</b>{res.scene.ledPlan.resolution.value && <> · {res.scene.ledPlan.resolution.value.w} × {res.scene.ledPlan.resolution.value.h} px <Badge s={res.scene.ledPlan.resolution.status} /></>}</span>}
             <span>Tables <b>{res.scene.objects.filter((o) => o.kind === 'table').length}</b></span>
+            {res.scene.objects.some((o) => o.kind === 'speaker') && <span>Audio <b>{res.scene.objects.filter((o) => o.kind === 'speaker' && o.meta?.role !== 'sub').length} tops + {res.scene.objects.filter((o) => o.meta?.role === 'sub').length} subs</b></span>}
             {res.scene.lightingPlan && <span>Lighting <b>{res.scene.objects.filter((o) => o.kind === 'light_fixture').length} fixtures</b> · {res.scene.lightingPlan.universes ?? '?'} universe(s) · {res.scene.lightingPlan.look}</span>}
             <span className="mono muted">hash {rev!.input_hash.slice(0, 10)}</span>
           </div>

@@ -29,6 +29,9 @@ import { type Confidence, type Source, type Sourced, weakest } from '../provenan
 import { fmtM } from '../units.js';
 import { cabinetGrid, checkProcessor, dataChains, ledPower, nearestWallSizes, wallResolution } from './led.js';
 import { describeStock, STRICT_POLICY, stockLimit, type StockPolicy } from './stock.js';
+import { nameTokens } from '../inventory/parse.js';
+import { guessManufacturer } from '../inventory/taxonomy.js';
+import { boxesForThrow, pickConsole, pickFamily, pickStageBox, subsForBoxes } from './audio.js';
 import { defaultCounts, DOWNSTAGE_ROLES, packDmx, pickFixture, UPSTAGE_ROLES, universesUsed } from './lighting.js';
 import { nearbyTileableSizes, tileStage, type DeckOption } from './staging.js';
 import type {
@@ -61,6 +64,7 @@ export function defaultParams(): DesignParams {
     seating: { style: 'rounds', seatsPerTable: 10, tableDiameterMm: 1800, pitchMm: 3300, frontClearanceMm: 3000, wallClearanceMm: 1000 },
     power: { voltageV: 230, circuitA: 16, planningFactor: 0.8 },
     lighting: { enabled: false, look: 'standard', movingHeads: null, stageWashes: null, consoleItemId: null },
+    audio: { enabled: false, system: 'auto', boxesPerSide: null, subsPerSide: null, wirelessHandheld: 2, wirelessHeadset: 2, consoleItemId: null },
     sources: {
       'stage.widthMm': d(),
       'stage.depthMm': d(),
@@ -84,7 +88,7 @@ export function defaultParams(): DesignParams {
 /** Fill parameter groups added after a revision was stored (older revisions stay valid). */
 export function normalizeParams(p: DesignParams): DesignParams {
   const d = defaultParams();
-  return { ...d, ...p, lighting: { ...d.lighting, ...(p.lighting ?? {}) }, power: { ...d.power, ...(p.power ?? {}) }, sources: { ...(p.sources ?? {}) } };
+  return { ...d, ...p, lighting: { ...d.lighting, ...(p.lighting ?? {}) }, audio: { ...d.audio, ...(p.audio ?? {}) }, power: { ...d.power, ...(p.power ?? {}) }, sources: { ...(p.sources ?? {}) } };
 }
 
 /**
@@ -741,6 +745,132 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   }
 
 
+  // ---- Audio (concept: PA, console, stage box, wireless) --------------------------------------------
+  if (P.audio.enabled) {
+    const A = P.audio;
+    const audioMsgs: string[] = [];
+    // Throw: from the array position to the farthest seated guest (or the room depth on axis).
+    const farLy = tables.length ? Math.max(...objects.filter((o) => o.kind === 'table').map((o) => Number(o.meta?.ly ?? 0) + o.size.x / 2)) : stageFrontLy + (avail ?? 15000);
+    const throwMm = Math.max(0, farLy - stageFrontLy);
+    const lineArrays = stock.filter((s) => s.category === 'SPEAKER_LINE_ARRAY' && lim(s) > 0);
+    const points = stock.filter((s) => s.category === 'SPEAKER_POINT_SOURCE' && lim(s) > 0);
+    const useLine = A.system === 'line_array' || (A.system === 'auto' && lineArrays.length > 0 && (throwMm > 12000 || (P.guests ?? 0) > 250));
+    const mains = pickFamily(useLine ? lineArrays : points, null, lim);
+    const perSide = A.boxesPerSide ?? (useLine ? boxesForThrow(throwMm) : 1);
+    if (A.boxesPerSide === null) assumptions.push({ id: 'audio.boxes', text: `${perSide} main box(es) per side from a ${fmtM(throwMm, 1)} throw (rule of thumb: ~1 line-array box per 6 m, 2–6 per side) — not an acoustic prediction`, status: 'ESTIMATED', source: DEFAULT });
+    const subItem = pickFamily(stock.filter((s) => s.category === 'SUBWOOFER'), mains, lim);
+    const subsPerSide = A.subsPerSide ?? (useLine ? subsForBoxes(perSide) : 1);
+    const sideX = SW / 2 + 1200;
+    const pos = stageFrontLy - 600;
+    const placeSide = (side: -1 | 1) => {
+      let z = 0;
+      for (let i = 0; i < subsPerSide && subItem; i++) {
+        objects.push({ id: `sub-${side < 0 ? 'L' : 'R'}${i + 1}`, kind: 'speaker', label: subItem.product, position: { ...W(side * sideX, pos), z }, rotationDeg, size: { x: 1100, y: 800, z: 600 }, itemId: subItem.itemId, supply: 'OWNED', status: 'UNKNOWN', meta: { role: 'sub', side } });
+        z += 600;
+      }
+      for (let i = 0; i < perSide && mains; i++) {
+        objects.push({ id: `main-${side < 0 ? 'L' : 'R'}${i + 1}`, kind: 'speaker', label: mains.product, position: { ...W(side * sideX, pos), z }, rotationDeg, size: { x: 700, y: 450, z: 300 }, itemId: mains.itemId, supply: 'OWNED', status: 'UNKNOWN', meta: { role: useLine ? 'line_array' : 'point_source', side } });
+        z += 300;
+      }
+    };
+    let audioFail = false;
+    if (!mains) {
+      audioFail = true;
+      audioMsgs.push('No main loudspeaker with usable stock');
+      unresolved.push({ id: 'audio.mains', description: 'Main PA loudspeakers', reason: 'No line-array or point-source speaker with usable stock', candidates: [...lineArrays, ...points].map((x) => x.product) });
+    } else {
+      const r = alloc.require(mains.itemId, perSide * 2, `Audio — main PA (${perSide}/side)`, 'ESTIMATED');
+      if (r.shortfall) audioFail = true;
+      audioMsgs.push(`Mains: ${perSide}/side × ${mains.product}${r.shortfall ? ` — short ${r.shortfall}${qtyNote(mains)}` : ''}`);
+    }
+    if (subItem) {
+      const r = alloc.require(subItem.itemId, subsPerSide * 2, `Audio — subwoofers (${subsPerSide}/side)`, 'ESTIMATED');
+      if (r.shortfall) audioFail = true;
+      audioMsgs.push(`Subs: ${subsPerSide}/side × ${subItem.product}${r.shortfall ? ` — short ${r.shortfall}${qtyNote(subItem)}` : ''}`);
+    } else audioMsgs.push('No subwoofer with usable stock');
+    placeSide(-1);
+    placeSide(1);
+    // Stacking / flying hardware named for the mains (e.g. "Flying Bar … for Muse 210LA").
+    const compact = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const modelToks = mains ? [...nameTokens(mains.product).models].filter((t) => /[a-z]{2,}/.test(t)).sort((a, b) => b.length - a.length) : [];
+    const bar = stock.find((s) => s.category === 'SPEAKER_MOUNTING' && lim(s) > 0 && modelToks.some((t) => compact(s.product).includes(t)));
+    if (useLine && mains) {
+      if (bar) {
+        const r = alloc.require(bar.itemId, 2, 'Audio — array stacking/flying bar (1/side)', 'ESTIMATED');
+        audioMsgs.push(`Stacking: 2 × ${bar.product}${r.shortfall ? ` — short ${r.shortfall}` : ''}`);
+      } else unresolved.push({ id: 'audio.mounting', description: `Stacking / flying hardware for ${mains.product}`, reason: 'No mounting item matched to this array model', candidates: stock.filter((s) => s.category === 'SPEAKER_MOUNTING').map((s) => s.product) });
+    }
+    const parts = [[mains, perSide], [subItem, subsPerSide]] as const;
+    const knownKg = parts.reduce((a, [it, n]) => a + (it ? (spec(it.specs, 'weight_kg').value ?? 0) * n : 0), 0);
+    const noWeight = parts.filter(([it]) => it && spec(it.specs, 'weight_kg').value === null).map(([it]) => it!.product);
+    const weightText = knownKg > 0 ? ` ${noWeight.length ? '≥ ' : '≈ '}${Math.round(knownKg)} kg per side${noWeight.length ? ` (weight not recorded for ${noWeight.join(', ')})` : ''}.` : noWeight.length ? ` Weight not recorded for ${noWeight.join(', ')}.` : '';
+    checks.push({
+      id: 'audio.system',
+      title: 'PA system (concept)',
+      discipline: 'audio',
+      severity: 'hard',
+      result: audioFail ? (mains ? 'FAIL' : 'UNKNOWN') : 'PASS',
+      message: `${audioMsgs.join(' · ')}. Ground-stacked ${fmtM(sideX - SW / 2)} outside each stage edge; throw ≈ ${fmtM(throwMm, 1)}.${weightText}`,
+      dataStatus: 'ESTIMATED',
+      inputs: [{ label: 'Throw distance', status: roomStatus }],
+    });
+    checks.push({ id: 'audio.coverage', title: 'Coverage & SPL', discipline: 'audio', severity: 'advisory', result: 'WARN', message: 'Not modelled. Design splay angles, coverage and SPL in the manufacturer prediction software and confirm on site. Ground-stack height and stability need a competent person’s check.', dataStatus: 'UNKNOWN', inputs: [] });
+
+    // Console at FOH + stage box on stage.
+    const desk = pickConsole(stock, lim, A.consoleItemId);
+    if (!desk) {
+      checks.push({ id: 'audio.console', title: 'Mixing console & stage box', discipline: 'audio', severity: 'hard', result: 'UNKNOWN', message: 'No mixing console with usable stock', dataStatus: 'UNKNOWN', inputs: [] });
+    } else {
+      alloc.require(desk.itemId, 1, 'Audio — FOH console', 'ESTIMATED');
+      const sb = pickStageBox(stock, desk, lim);
+      let msg = `${desk.product} at FOH`;
+      let res: 'PASS' | 'WARN' = 'PASS';
+      if (sb) {
+        alloc.require(sb.box.itemId, 1, 'Audio — stage box', sb.fact.status);
+        objects.push({ id: 'stage-box', kind: 'audio_device', label: sb.box.product, position: { ...W(SW / 2 - 800, stageFrontLy - 1200), z: stageH! }, rotationDeg, size: { x: 480, y: 400, z: 300 }, itemId: sb.box.itemId, supply: 'OWNED', status: 'UNKNOWN' });
+        msg += ` → ${sb.box.product} on stage via ${sb.fact.link} (compatibility ${sb.fact.status}).`;
+        const snake = fohPoly ? Math.ceil(((fohLy - stageFrontLy) + SW / 2 + 6000) * 1.2 / 1000) * 1000 : null;
+        if (snake !== null) msg += ` Snake ≈ ${fmtM(snake, 0)} of Cat5e/6 (route + 20 %).`;
+        if (snake !== null) unresolved.push({ id: 'audio.snake', description: `Stage-box link cable ≥ ${fmtM(snake, 0)} (Cat5e/6, shielded)`, reason: 'Cable lengths are not in the inventory product names', candidates: stock.filter((s) => s.category === 'CABLE' && /\bcat\b|network reel/i.test(s.product)).map((s) => s.product) });
+      } else {
+        res = 'WARN';
+        msg += '; no compatible stage box identified — inputs at FOH or check compatibility';
+      }
+      checks.push({ id: 'audio.console', title: 'Mixing console & stage box', discipline: 'audio', severity: 'advisory', result: res, message: msg, dataStatus: 'ESTIMATED', inputs: [] });
+    }
+
+    // Wireless microphones (receiver per transmitter, same system family).
+    const mics = stock.filter((s) => s.category === 'MICROPHONE' && lim(s) > 0);
+    const handheld = mics.find((m) => /handheld|\bskm\b/i.test(m.product));
+    const bodypack = mics.find((m) => /body ?packs?|\bsk\b/i.test(m.product));
+    const receiver = mics.find((m) => /receiver|\bem\b/i.test(m.product));
+    // Headset mics must suit the bodypack: prefer the same manufacturer (e.g. Sennheiser HS with Sennheiser SK).
+    const maker = (x: StockItem | undefined) => (x ? guessManufacturer(x.product) : null);
+    const headsets = mics.filter((m) => /headset|head set|\bhs\b/i.test(m.product) && !/intercom/i.test(m.product));
+    const headset = headsets.find((m) => maker(m) && maker(m) === maker(bodypack)) ?? headsets[0];
+    const wmsg: string[] = [];
+    let wfail = false;
+    const need = (it: StockItem | undefined, n: number, purpose: string) => {
+      if (n <= 0) return;
+      if (!it) {
+        wfail = true;
+        wmsg.push(`no ${purpose.toLowerCase()} found`);
+        return;
+      }
+      const r = alloc.require(it.itemId, n, `Audio — ${purpose}`, 'ESTIMATED');
+      wmsg.push(`${n} × ${it.product}${r.shortfall ? ` (short ${r.shortfall})` : ''}`);
+      if (r.shortfall) wfail = true;
+    };
+    need(handheld, A.wirelessHandheld, 'Wireless handheld');
+    need(bodypack, A.wirelessHeadset, 'Wireless bodypack');
+    need(headset, A.wirelessHeadset, 'Headset mic');
+    need(receiver, A.wirelessHandheld + A.wirelessHeadset, 'Wireless receiver (1 per transmitter)');
+    if (A.wirelessHandheld + A.wirelessHeadset > 0) {
+      assumptions.push({ id: 'audio.wireless', text: `${A.wirelessHandheld} handheld + ${A.wirelessHeadset} headset wireless channels (design default for presentations)`, status: 'ESTIMATED', source: DEFAULT });
+      checks.push({ id: 'audio.wireless', title: 'Wireless microphones', discipline: 'audio', severity: 'advisory', result: wfail ? 'WARN' : 'PASS', message: `${wmsg.join('; ')}. Frequency coordination (ICASA) and batteries not planned.`, dataStatus: 'ESTIMATED', inputs: [] });
+    }
+  }
+
   // ---- Lighting (floor-mounted on the stage deck; front light & truss not designed) ---------------
   let lightingPlan: LightingPlan | null = null;
   if (P.lighting.enabled) {
@@ -889,11 +1019,11 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   for (const [id, title, message] of human) checks.push({ id, title, discipline: 'safety', severity: 'hard', result: 'HUMAN_REQUIRED', message, dataStatus: 'UNKNOWN', inputs: [] });
   for (const [id, title] of [
     ...(P.lighting.enabled ? [] : ([['scope.lighting', 'Lighting design']] as const)),
-    ['scope.audio', 'Audio design'],
+    ...(P.audio.enabled ? [] : ([['scope.audio', 'Audio design']] as const)),
     ['scope.video', 'Video / camera signal path'],
     ['scope.truss', 'Truss & rigging layout'],
   ] as const) {
-    const message = id === 'scope.lighting' ? 'Lighting is switched off for this design (say “add lighting” to include it).' : 'Not designed by this version of the engine (planned: Phase 3). Equipment for this discipline is not in the schedule.';
+    const message = id === 'scope.lighting' ? 'Lighting is switched off for this design (say “add lighting” to include it).' : id === 'scope.audio' ? 'Audio is switched off for this design (say “add sound” to include it).' : 'Not designed by this version of the engine (planned: Phase 3). Equipment for this discipline is not in the schedule.';
     checks.push({ id, title, discipline: 'scope', severity: 'advisory', result: 'UNKNOWN', message, dataStatus: 'UNKNOWN', inputs: [] });
   }
 

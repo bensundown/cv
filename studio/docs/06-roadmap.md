@@ -17,6 +17,9 @@ Legend: ✅ done in this delivery · ◐ partly · ☐ next
 ## Phase 3 — Equipment intelligence (started)
 ✅ Lighting first pass: roles, selection, placement on deck, DMX patch, console check, power, commands (“more dramatic”, “fewer moving heads”, “8 moving heads”, “4 washes”, “add/remove lighting”), 3D beams, plan symbols, PDF patch page.
 
+✅ Audio first pass: PA concept (mains/subs/stacking), console + stage box pairing, snake length, wireless, commands (“add/remove sound”, “4 boxes per side”, “2 subs per side”, “use point source / line arrays”, “4 handheld mics”).
+✅ Spec library: researched manufacturer specs with sources, auto-applied, self-correcting.
+
 - Spec enrichment workflow from manufacturer documents (upload datasheet → extract → reviewer verifies).
 - Relationship templates per family (AluStage decks/legs, Leyard cabinets/frames, Novastar outputs, QUAD 290/OV40 connectors).
 - Lighting next: front-light positions on stands/truss, DMX distribution schedule, fixture dimensions/weights for loads; audio (FBT Muse/Horizon arrays, preliminary coverage

@@ -132,7 +132,15 @@ const HINT_SPEC: [keyof ReturnType<typeof parseNameHints>, string, string][] = [
  */
 export async function applySpecLibraryToModel(c: Q, modelId: string, product: string): Promise<number> {
   let n = 0;
-  for (const e of matchSpecLibrary(product)) {
+  const entries = matchSpecLibrary(product);
+  // Retract library values that the current library no longer gives this product (library corrections).
+  const keep = new Set(entries.flatMap((e) => e.specs.map((sp) => sp.key)));
+  const libRows = await many<{ id: string; key: string }>(c, `SELECT id, key FROM spec_value WHERE product_model_id=$1 AND superseded_at IS NULL AND source->>'ref' LIKE 'Spec library%'`, [modelId]);
+  for (const r of libRows) if (!keep.has(r.key)) {
+    await c.query('UPDATE spec_value SET superseded_at=now() WHERE id=$1', [r.id]);
+    n++;
+  }
+  for (const e of entries) {
     await c.query('UPDATE product_model SET manufacturer=COALESCE(manufacturer, $2) WHERE id=$1', [modelId, e.manufacturer]);
     for (const sp of e.specs) {
       const cur = await one<{ id: string; source: { kind: string; ref?: string } }>(c, 'SELECT id, source FROM spec_value WHERE product_model_id=$1 AND key=$2 AND superseded_at IS NULL', [modelId, sp.key]);
