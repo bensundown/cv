@@ -55,6 +55,5 @@ pnpm desktop:build                    # offline Electron app for the current OS 
 Offline mode: `apps/server/src/db-pglite.ts` adapts PGlite to the pg.Pool subset we use (single connection,
 mutex-serialised). Keep SQL portable to both (no extensions beyond core). `apps/desktop/main.mjs` sets
 STORAGE_DIR/WEB_DIST/MIGRATIONS_DIR/FONT_DIR before importing the bundled `embedded.mjs`.
-```text
-```
+
 Test data is synthetic and labelled as such. Never commit real client or inventory data to fixtures.
