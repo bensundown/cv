@@ -30,6 +30,8 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: studio/pnpm-lock.yaml
+      - name: Use HTTPS for GitHub-hosted dependencies (runners have no SSH key)
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm --filter @sn/core test
