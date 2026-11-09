@@ -240,7 +240,7 @@ export type OverallStatus = 'FAILS_CHECKS' | 'INCOMPLETE' | Confidence;
 
 export interface DesignContext {
   /** Allocation policy; absent = confirmed owned quantities only. */
-  stockPolicy?: { useFileQuantities: boolean; headroomPct: number };
+  stockPolicy?: { useFileQuantities: boolean; headroomPct: number; unlimited?: boolean };
   params: DesignParams;
   venue: VenueGeometry;
   stock: StockItem[];

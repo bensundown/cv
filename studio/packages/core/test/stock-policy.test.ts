@@ -45,3 +45,19 @@ describe('design under the owner guideline policy', () => {
     expect(r.bom.lines.find((l) => l.itemId === 'led26')!.allocated).toBe(0);
   });
 });
+
+describe('no-limits policy (owner decision 2026-11-09)', () => {
+  it('never caps by stock and flags units over recorded quantities', async () => {
+    const { stockLimit, NO_LIMITS_POLICY } = await import('../src/index.js');
+    const a = stockLimit({ qtyConfirmed: null, qtyShown: 10 }, NO_LIMITS_POLICY);
+    expect(a.basis).toBe('FILE_GUIDELINE');
+    expect(a.guideline).toBe(10);
+    expect(a.limit).toBeGreaterThan(10_000);
+    const b = stockLimit({ qtyConfirmed: 4, qtyShown: 10 }, NO_LIMITS_POLICY);
+    expect(b.basis).toBe('CONFIRMED');
+    expect(b.guideline).toBe(4);
+    const c = stockLimit({ qtyConfirmed: null, qtyShown: null }, NO_LIMITS_POLICY);
+    expect(c.basis).toBe('NONE');
+    expect(c.limit).toBeLessThan(a.limit); // ranking still prefers recorded stock
+  });
+});

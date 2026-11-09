@@ -137,7 +137,7 @@ class Allocator {
     const before = this.used.get(itemId) ?? 0;
     this.used.set(itemId, before + allocated);
     const sl = stockLimit(it, this.policy);
-    const overGuideline = sl.basis === 'FILE_GUIDELINE' ? Math.max(0, before + allocated - sl.guideline!) - Math.max(0, before - sl.guideline!) : 0;
+    const overGuideline = sl.basis === 'FILE_GUIDELINE' || (this.policy.unlimited && sl.guideline !== null) ? Math.max(0, before + allocated - sl.guideline!) - Math.max(0, before - sl.guideline!) : 0;
     this.lines.push({
       itemId,
       rmsId: it.rmsId,
@@ -1189,8 +1189,24 @@ export function generateDesign(ctx: DesignContext): DesignResult {
   if (fohPoly) nonInventory.push({ description: `FOH riser/area ${fmtM(P.foh.widthMm)} × ${fmtM(P.foh.depthMm)}`, qty: 1, note: 'Space allocation only; FOH equipment not yet designed' });
 
   // ---- Stock availability (guideline policy) -----------------------------------------------------
+  if (policy.unlimited) {
+    const over = alloc.lines.filter((l) => l.overGuideline > 0);
+    checks.push({
+      id: 'inventory.availability',
+      title: 'Stock availability (no-limits mode)',
+      discipline: 'inventory',
+      severity: 'advisory',
+      result: over.length ? 'WARN' : 'PASS',
+      message: over.length
+        ? `No-limits mode: ${over.length} line(s) exceed recorded stock and must be hired in or confirmed: ${over.map((l) => `${l.product} +${l.overGuideline} over ${l.stockBasis === 'NONE' ? 'none recorded' : l.stockBasis === 'CONFIRMED' ? l.qtyConfirmed : l.qtyShown}`).join(', ')}.`
+        : 'No-limits mode: every allocated line is within recorded stock.',
+      dataStatus: 'PROVISIONAL',
+      inputs: [],
+    });
+    assumptions.push({ id: 'stock.policy', text: 'Stock policy: no limits — the design uses what the event needs; quantities over recorded stock are flagged for hire or confirmation', status: 'PROVISIONAL', source: { kind: 'user_confirmation', note: 'Owner decision 2026-11-09' } });
+  }
   const guided = alloc.lines.filter((l) => l.allocated > 0 && l.stockBasis === 'FILE_GUIDELINE');
-  if (guided.length) {
+  if (guided.length && !policy.unlimited) {
     const over = guided.filter((l) => l.overGuideline > 0);
     checks.push({
       id: 'inventory.availability',
@@ -1203,7 +1219,7 @@ export function generateDesign(ctx: DesignContext): DesignResult {
       inputs: [],
     });
   }
-  if (policy.useFileQuantities) {
+  if (policy.useFileQuantities && !policy.unlimited) {
     assumptions.push({ id: 'stock.policy', text: `Stock policy: file quantities used as availability guidelines with up to ${policy.headroomPct} % headroom; confirmed owned quantities are hard limits`, status: 'PROVISIONAL', source: { kind: 'user_confirmation', note: 'Owner decision D-016' } });
   }
 

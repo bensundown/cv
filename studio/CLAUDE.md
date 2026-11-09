@@ -21,7 +21,8 @@ Docs live in `docs/` (PRD, architecture, data model, provenance, roadmap, risks,
    quantity (RMS "available to rent") is an availability *guideline* and up to `headroomPct` (default 20 %)
    more may be allocated — tenant setting `stock_policy`, frozen into each revision. Units over the guideline
    are always flagged (`overGuideline`, `inventory.availability` check). Blank/zero file qty → nothing.
-   The engine itself defaults to confirmed-only when no policy is passed. Never present hired-in equipment as owned.
+   Owner "No limits" mode (`NO_LIMITS_POLICY`, D-018) never caps a design by stock but flags every unit over
+   recorded stock. The engine itself defaults to confirmed-only when no policy is passed. Never present hired-in equipment as owned.
 6. **Not certification.** Nothing auto-generated is structural/electrical/rigging/crowd-safety approval.
    Safety checks are `HUMAN_REQUIRED`; concept mode is capped at PROVISIONAL.
 7. **Don't fake features.** Unsupported requests get an honest reply (see `interpretCommand`). Unbuilt
@@ -51,6 +52,7 @@ pnpm --filter @sn/web build
 node e2e/smoke.mjs http://127.0.0.1:8787 ./e2e-output   # browser e2e on an EMPTY database
 pnpm --filter @sn/server test:pglite  # API tests on the embedded PGlite database (offline mode)
 pnpm desktop:build                    # offline Electron app for the current OS → release/desktop/
+pnpm --filter @sn/page build          # single-file page edition (no server/login) → apps/page/dist/
 ```
 Offline mode: `apps/server/src/db-pglite.ts` adapts PGlite to the pg.Pool subset we use (single connection,
 mutex-serialised). Keep SQL portable to both (no extensions beyond core). `apps/desktop/main.mjs` sets

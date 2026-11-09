@@ -14,6 +14,12 @@ export interface StockPolicy {
   useFileQuantities: boolean;
   /** Extra allowance above the file quantity, in percent (e.g. 20). */
   headroomPct: number;
+  /**
+   * Owner "no limits" mode: never cap a design by stock. Every item may be allocated as needed;
+   * anything beyond the confirmed or file quantity is flagged as over stock (shortfall to hire/confirm).
+   * Ranking between candidate items still follows their recorded quantities.
+   */
+  unlimited?: boolean;
 }
 
 export const STRICT_POLICY: StockPolicy = { useFileQuantities: false, headroomPct: 0 };
@@ -22,7 +28,20 @@ export const OWNER_GUIDELINE_POLICY: StockPolicy = { useFileQuantities: true, he
 
 export type StockBasis = 'CONFIRMED' | 'FILE_GUIDELINE' | 'NONE';
 
+/** Owner decision 2026-11-09: remove stock hurdles; design freely and flag what exceeds stock. */
+export const NO_LIMITS_POLICY: StockPolicy = { useFileQuantities: true, headroomPct: 20, unlimited: true };
+
+const UNLIMITED = 100_000;
+
 export function stockLimit(it: Pick<StockItem, 'qtyConfirmed' | 'qtyShown'>, policy: StockPolicy): { limit: number; guideline: number | null; basis: StockBasis } {
+  if (policy.unlimited) {
+    const q = it.qtyShown;
+    const fileQ = q !== null && Number.isInteger(q) && q > 0 ? q : null;
+    const guideline = it.qtyConfirmed ?? fileQ ?? 0;
+    const basis: StockBasis = it.qtyConfirmed !== null ? 'CONFIRMED' : fileQ !== null ? 'FILE_GUIDELINE' : 'NONE';
+    // Large limit, scaled by recorded quantity so "most stock" ranking still prefers what is actually held.
+    return { limit: UNLIMITED + guideline, guideline, basis };
+  }
   if (it.qtyConfirmed !== null) return { limit: it.qtyConfirmed, guideline: null, basis: 'CONFIRMED' };
   const q = it.qtyShown;
   if (policy.useFileQuantities && q !== null && Number.isInteger(q) && q > 0) {
@@ -35,6 +54,7 @@ export function stockLimit(it: Pick<StockItem, 'qtyConfirmed' | 'qtyShown'>, pol
 export function describeStock(it: Pick<StockItem, 'qtyConfirmed' | 'qtyShown'> | undefined, policy: StockPolicy): string {
   if (!it) return '';
   const s = stockLimit(it, policy);
+  if (policy.unlimited) return ` (no-limits mode: ${s.basis === 'CONFIRMED' ? `confirmed ${s.guideline}` : s.basis === 'FILE_GUIDELINE' ? `file shows ${s.guideline}` : 'no quantity recorded'}; extra units flagged)`;
   if (s.basis === 'CONFIRMED') return ` (confirmed owned: ${s.limit})`;
   if (s.basis === 'FILE_GUIDELINE') return ` (availability guideline: ${s.guideline} in file${s.limit > s.guideline! ? `, up to ${s.limit} with ${policy.headroomPct} % headroom` : ''})`;
   return policy.useFileQuantities
